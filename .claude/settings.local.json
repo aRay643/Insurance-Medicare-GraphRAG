@@ -10,7 +10,14 @@
       "Bash(git -C \"c:/Users/14673\" status)",
       "Bash(git -C \"c:/Users/14673\" remote -v)",
       "Bash(git -C \"c:/Users/14673\" log --oneline -10)",
-      "Bash(git init:*)"
+      "Bash(git init:*)",
+      "Bash(npm install)",
+      "Bash(npm install:*)",
+      "Bash(brew install:*)",
+      "Bash(pnpm approve-builds:*)",
+      "Bash(pnpm install)",
+      "Bash(PNPM_ALLOW_ALL_SCRIPTS=true pnpm:*)",
+      "Bash(pnpm run dev:*)"
     ]
   }
 }
