@@ -21,7 +21,8 @@ build/
 *~
 
 # Claude Code
-.claude/settings.local.json
+.claude/
+!.claude.json
 
 # Environment variables
 .env
@@ -43,3 +44,7 @@ Thumbs.db
 # Node (if any)
 node_modules/
 package-lock.json
+
+# Project specific PDFs
+*.pdf
+!README*.pdf

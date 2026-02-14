@@ -10,7 +10,11 @@
       "Bash(git -C \"c:/Users/14673\" status)",
       "Bash(git -C \"c:/Users/14673\" remote -v)",
       "Bash(git -C \"c:/Users/14673\" log --oneline -10)",
-      "Bash(git init:*)"
+      "Bash(git init:*)",
+      "Bash(git commit:*)",
+      "Bash(git remote add:*)",
+      "Bash(git branch:*)",
+      "Bash(git push -u origin master)"
     ]
   }
 }
