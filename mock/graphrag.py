@@ -7,80 +7,120 @@ client = OpenAI(
     base_url="https://spark-api-open.xf-yun.com/v1"
 )
 
-# 2. 模拟图谱数据
-MOCK_NODES = ["原发性高血压", "2型糖尿病", "平安e生保护理险", "投保年龄限制"]
-MOCK_GRAPH = [
-    ("原发性高血压", "被排除在承保范围之外", "平安e生保护理险"),
-    ("平安e生保护理险", "最高投保年龄", "65岁"),
-    ("原发性高血压", "分类为", "慢性病")
+# 2. 节点定义 (用于实体链接)
+MOCK_NODES = [
+    "高血压", "糖尿病", "心脏病", "癌症", "阿尔兹海默症", "骨折",
+    "护理险", "意外险", "医疗险", "补充医疗险",
+    "等待期", "除外责任", "免责条款", "费率表", "失能等级", "医保报销", "异地结算",
+    "降压药", "手术", "化疗", "康复",
+    "城市医养结合机构", "城市养老机构", "社区卫生中心",
+    "居家养老", "机构养老", "上门护理服务",
+    "68岁", "70岁"
 ]
 
-# 3. 逻辑函数封装
+# 3. 对应扩展的模拟图谱数据 (增加关系以支撑复杂查询)
+# 结构: (Subject, Relation, Object, Relation_Type)
+MOCK_GRAPH = [
+    # 保险与疾病关系
+    ("高血压", "在健康告知中被要求如实告知", "护理险", "投保规则"),
+    ("高血压", "通常作为除外责任", "医疗险", "理赔条款"),
+    ("癌症", "等待期通常为", "90天", "投保规则"),
+    
+    # 产品限制
+    ("护理险", "最高投保年龄", "65岁", "投保规则"),
+    ("意外险", "支持投保年龄可达", "80岁", "投保规则"),
+    
+    # 医养结合逻辑
+    ("社区卫生中心", "提供", "上门护理服务", "养老服务"),
+    ("阿尔兹海默症", "适合入住", "城市医养结合机构", "养老匹配"),
+    ("城市养老机构", "支持", "异地结算", "医保政策"),
+    
+    # 医疗逻辑
+    ("高血压", "需要长期服用", "降压药", "医学常识"),
+    ("骨折", "术后需要", "康复", "医学常识")
+]
+
+# 4. 逻辑函数
 def link_entity(user_mention):
-    """实体对齐：将用户口语词映射到标准节点名"""
+    """使用 get_close_matches 在你定义的 MOCK_NODES 中寻找最接近的实体"""
     match = get_close_matches(user_mention, MOCK_NODES, n=1, cutoff=0.5)
     return match[0] if match else None
 
-#需要增加关系过滤防止prompt爆炸
-def get_subgraph(entity_names):
-    """知识检索：获取相关实体的 1-hop 三元组"""
+def get_subgraph_optimized(entity_names, query):
+    """
+    关系过滤逻辑：
+    根据问题中的关键词（如 '年龄', '机构', '报销'）动态筛选关系类型
+    """
+    intent_map = {
+        "岁": ["投保规则"],
+        "年": ["投保规则"],
+        "能买": ["投保规则", "理赔条款"],
+        "住": ["养老匹配", "养老服务"],
+        "钱": ["费率表", "医保报销"],
+        "报销": ["医保政策", "医保报销"]
+    }
+    
+    active_types = []
+    for key, r_types in intent_map.items():
+        if key in query:
+            active_types.extend(r_types)
+    
+    # 如果没匹配到意图，默认展示基础投保逻辑
+    if not active_types:
+        active_types = ["投保规则", "理赔条款", "养老匹配"]
+
     facts = []
     for name in entity_names:
-        sub = [f"{s} 的 {p} 是 {o}" for s, p, o in MOCK_GRAPH if name in (s, o)]
+        sub = [
+            f"{s} 的 {p} 是 {o}" 
+            for s, p, o, r_type in MOCK_GRAPH 
+            if (name == s or name == o) and r_type in active_types
+        ]
         facts.extend(sub)
-    return list(set(facts)) # 去重
+    return list(set(facts))
 
 def ask_spark(prompt):
-    """调用星火 Lite 生成答案"""
+    """调用星火 Lite"""
     try:
         completion = client.chat.completions.create(
             model="lite",
             messages=[
-                {"role": "system", "content": "你是一个严谨的保险医养专家。只能根据提供的事实回答，禁止胡编乱造。"},
+                {"role": "system", "content": "你是一位资深的保险医养专家。请根据事实进行严谨的逻辑推导.未出现的事实回答不知道，禁止编造。"},
                 {"role": "user", "content": prompt}
             ],
-            temperature=0.1 # 降低随机性，保证严谨
+            temperature=0.1
         )
         return completion.choices[0].message.content
     except Exception as e:
         return f"接口调用失败: {str(e)}"
+
+# 5. 增强版主工作流
+def graph_rag_run(query):
+    print(f"--- 跨域检索测试 ---")
+    print(f"问: {query}")
     
-# 4. GraphRAG 主工作流
-def graph_rag_test(query):
-    print(f"--- 测试开始 ---")
-    print(f"用户问题: {query}")
+    # 模拟简单的实体提取逻辑（实际可用 NLP 工具提取更多）
+    # 这里我们遍历 MOCK_NODES，看看问题里提到了哪些
+    found_mentions = [node for node in MOCK_NODES if node in query]
     
-    # A. 提取实体并对齐 (实际工程中这步也可用 LLM 做)
-    mentions = ["高血压", "平安e生保"] 
-    standard_entities = [link_entity(m) for m in mentions if link_entity(m)]
-    print(f"识别实体: {standard_entities}")
+    # 实体对齐
+    standard_entities = [link_entity(m) for m in found_mentions]
+    print(f"匹配实体: {standard_entities}")
     
-    # B. 从图谱获取背景知识
-    facts = get_subgraph(standard_entities)
+    # 检索
+    facts = get_subgraph_optimized(standard_entities, query)
     context = "\n".join([f"- {f}" for f in facts])
-    print(f"检索事实:\n{context if context else '未找到相关事实'}")
+    print(f"检索事实:\n{context if context else '无相关事实'}")
     
-    # C. 构造 Prompt 并生成回答
-    final_prompt = f"已知事实背景：\n{context}\n\n请回答：{query}"
+    # 生成
+    final_prompt = f"【事实背景】\n{context}\n\n【问题】\n{query}\n\n请结合事实背景给出专业建议："
     answer = ask_spark(final_prompt)
     
-    print(f"\nAI 回答:\n{answer}")
-    print(f"--- 测试结束 ---\n")
+    print(f"\nAI 回答:\n{answer}\n")
 
-# 5. 执行一次完整的逻辑测试
 if __name__ == "__main__":
-    # 场景：测试保险年龄限制和疾病禁忌
-    test_query = "我有高血压，今年70岁，能买平安e生保护理险吗？"
-    graph_rag_test(test_query)
-
-'''#--- 测试开始 ---
-用户问题: 我有高血压，今年70岁，能买平安e生保护理险吗？
-识别实体: ['原发性高血压', '平安e生保护理险']
-检索事实:
-- 原发性高血压 的 被排除在承保范围之外 是 平安e生保护理险
-- 平安e生保护理险 的 最高投保年龄 是 65岁
-- 原发性高血压 的 分类为 是 慢性病
-
-AI 回答:
-根据提供的事实背景，原发性高血压被排除在承保范围之外。这意味着如果你有高血压，那么你可能无法购买平安e生保护理险。然而，你提到今年70岁，这可能意味着你已经超过了最高投保年龄。因此，我无法确定你是否能够购买平安e生保护理险，除非提供更多关于你的年龄和健康状况的信息。
---- 测试结束 ---'''
+    # 测试 1：保险与年龄限制
+    graph_rag_run("我有高血压，70岁了，还能买护理险吗？")
+    
+    # 测试 2：养老机构与政策
+    graph_rag_run("阿尔兹海默症老人适合住哪类机构？能异地结算吗？")
