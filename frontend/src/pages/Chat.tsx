@@ -3,6 +3,18 @@ import { useNavigate } from 'react-router-dom';
 import { chatAPI } from '../services/api';
 import type { ChatMessage } from '../services/api';
 
+// 模拟的三元组数据（后端未完成时使用）
+const MOCK_CITATIONS = [
+  { subject: "原发性高血压", predicate: "被排除在承保范围之外", object: "平安e生保护理险" },
+  { subject: "平安e生保护理险", predicate: "最高投保年龄", object: "65岁" },
+  { subject: "原发性高血压", predicate: "分类为", object: "慢性病" }
+];
+
+// 格式化三元组显示
+const formatTriple = (cite: { subject: string; predicate: string; object: string }) => {
+  return `(${cite.subject}) -- [${cite.predicate}] --> (${cite.object})`;
+};
+
 export default function Chat() {
   const [messages, setMessages] = useState<ChatMessage[]>([
     {
@@ -13,6 +25,7 @@ export default function Chat() {
   ]);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
+  const [expandedEvidence, setExpandedEvidence] = useState<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const navigate = useNavigate();
 
@@ -41,15 +54,19 @@ export default function Chat() {
         id: (Date.now() + 1).toString(),
         role: 'assistant',
         content: response.answer,
-        citations: response.citations,
+        // 成功时：优先用后端返回的，否则用 Mock
+        citations: response.citations?.length ? response.citations : MOCK_CITATIONS,
         confidence: response.confidence
       };
       setMessages(prev => [...prev, assistantMessage]);
     } catch (error) {
+      console.error("请求失败:", error); // 建议打印错误以便调试
       const errorMessage: ChatMessage = {
         id: (Date.now() + 1).toString(),
         role: 'assistant',
-        content: '抱歉，请检查后端服务是否启动，或稍后再试。'
+        content: '抱歉，请检查后端服务是否启动，或稍后再试。',
+        // 【修改点】在这里也加上 citations，这样报错时也能看到按钮（用于测试 UI）
+        citations: MOCK_CITATIONS 
       };
       setMessages(prev => [...prev, errorMessage]);
     } finally {
@@ -108,13 +125,57 @@ export default function Chat() {
               }}>
                 {item.role === 'user' ? 'U' : 'AI'}
               </div>
-              <div style={{
-                background: '#fff',
-                padding: '12px 16px',
-                borderRadius: 8,
-                boxShadow: '0 1px 2px rgba(0,0,0,0.1)'
-              }}>
-                {item.content}
+              <div style={{ flex: 1 }}>
+                <div style={{
+                  background: '#fff',
+                  padding: '12px 16px',
+                  borderRadius: 8,
+                  boxShadow: '0 1px 2px rgba(0,0,0,0.1)'
+                }}>
+                  {item.content}
+                </div>
+                {/* 证据展示部分 - 仅 AI 消息显示 */}
+                {item.role === 'assistant' && item.citations && item.citations.length > 0 && (
+                  <div style={{ marginTop: 8 }}>
+                    <button
+                      onClick={() => setExpandedEvidence(expandedEvidence === item.id ? null : item.id)}
+                      style={{
+                        background: '#6c757d',
+                        color: '#fff',
+                        border: 'none',
+                        borderRadius: 4,
+                        padding: '4px 12px',
+                        fontSize: 13,
+                        cursor: 'pointer'
+                      }}
+                    >
+                      {expandedEvidence === item.id ? '收起证据' : '查看证据'} (Graph Evidence)
+                    </button>
+                    {expandedEvidence === item.id && (
+                      <div style={{
+                        marginTop: 8,
+                        padding: 12,
+                        background: '#f8f9fa',
+                        border: '1px solid #e9ecef',
+                        borderRadius: 6,
+                        fontSize: 13
+                      }}>
+                        <div style={{ fontWeight: 'bold', marginBottom: 8, color: '#495057' }}>
+                          知识图谱提取的三元组：
+                        </div>
+                        {item.citations.map((cite, idx) => (
+                          <div key={idx} style={{
+                            fontFamily: 'monospace',
+                            color: '#495057',
+                            margin: '4px 0'
+                          }}>
+                            {formatTriple(cite)}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
             </div>
           </div>

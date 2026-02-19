@@ -6,14 +6,19 @@ export interface ChatMessage {
   id: string;
   role: 'user' | 'assistant';
   content: string;
-  citations?: { triple: string; source_id?: string }[];
+  citations?: {
+    subject: string;
+    predicate: string;
+    object: string;
+    source_id?: string;
+  }[];
   confidence?: string;
 }
 
 export const chatAPI = {
   ask: async (question: string): Promise<{
     answer: string;
-    citations: { triple: string; source_id?: string }[];
+    citations: { subject: string; predicate: string; object: string; source_id?: string }[];
     confidence: string;
   }> => {
     const response = await axios.post(`${API_BASE_URL}/chat`, {
