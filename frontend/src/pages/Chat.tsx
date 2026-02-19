@@ -3,16 +3,27 @@ import { useNavigate } from 'react-router-dom';
 import { chatAPI } from '../services/api';
 import type { ChatMessage } from '../services/api';
 
-// 模拟的三元组数据（后端未完成时使用）
-const MOCK_CITATIONS = [
-  { subject: "原发性高血压", predicate: "被排除在承保范围之外", object: "平安e生保护理险" },
-  { subject: "平安e生保护理险", predicate: "最高投保年龄", object: "65岁" },
-  { subject: "原发性高血压", predicate: "分类为", object: "慢性病" }
+const MOCK_GRAPH = [
+  ["高血压", "在健康告知中被要求如实告知", "护理险", "投保规则"],
+  ["高血压", "通常作为除外责任", "医疗险", "理赔条款"],
+  ["癌症", "等待期通常为", "90天", "投保规则"],
+  ["护理险", "最高投保年龄", "65岁", "投保规则"],
+  ["意外险", "支持投保年龄可达", "80岁", "投保规则"],
+  ["社区卫生中心", "提供", "上门护理服务", "养老服务"],
+  ["阿尔兹海默症", "适合入住", "城市医养结合机构", "养老匹配"],
+  ["城市养老机构", "支持", "异地结算", "医保政策"],
+  ["高血压", "需要长期服用", "降压药", "医学常识"],
+  ["骨折", "术后需要", "康复", "医学常识"]
 ];
 
 // 格式化三元组显示
-const formatTriple = (cite: { subject: string; predicate: string; object: string }) => {
-  return `(${cite.subject}) -- [${cite.predicate}] --> (${cite.object})`;
+const formatTriple = (cite: any) => {
+  // 如果是新数据的数组格式
+  if (Array.isArray(cite)) {
+    // 格式：(主体) -- [谓语] --> (客体) 【来源】
+    return `(${cite[0]}) -- [${cite[1]}] --> (${cite[2]})` + (cite[3] ? ` 【${cite[3]}】` : '');
+  }
+  return String(cite);
 };
 
 export default function Chat() {
@@ -55,7 +66,7 @@ export default function Chat() {
         role: 'assistant',
         content: response.answer,
         // 成功时：优先用后端返回的，否则用 Mock
-        citations: response.citations?.length ? response.citations : MOCK_CITATIONS,
+        citations: response.citations?.length ? response.citations : MOCK_GRAPH,
         confidence: response.confidence
       };
       setMessages(prev => [...prev, assistantMessage]);
@@ -66,7 +77,7 @@ export default function Chat() {
         role: 'assistant',
         content: '抱歉，请检查后端服务是否启动，或稍后再试。',
         // 【修改点】在这里也加上 citations，这样报错时也能看到按钮（用于测试 UI）
-        citations: MOCK_CITATIONS 
+        citations: MOCK_GRAPH 
       };
       setMessages(prev => [...prev, errorMessage]);
     } finally {
