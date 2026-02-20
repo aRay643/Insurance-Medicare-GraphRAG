@@ -67,9 +67,9 @@ pip install -r requirements.txt
 - 启动 Neo4j Desktop 并确保安装了 Database。
 
 **2. 创建数据库（使用 Neo4j Desktop）**
-1. **新建项目**: 在 Neo4j Desktop 中创建一个新 Project。
-2. **添加数据库**: 点击 `Add` -> `Local DBMS` 创建图数据库。
-3. **设置密码**: 建议设置密码为 **`88888888`**。
+1. **新建项目**: 在 Neo4j Desktop 中创建一个新 instance。
+2. **添加数据库**: 任意起一个数据库名称，版本保持默认版本。
+3. **设置密码**: 建议设置密码为 **`88888888`**，点击Create。
    - *如果使用其他密码，请修改 `scripts/import_to_neo4j.py` 和 `scripts/test_neo4j.py` 中的 `NEO4J_PASSWORD` 变量。*
 4. **安装插件**: (可选) 推荐安装 **APOC** 插件以支持更高级的图算法。
 5. **启动服务**: 点击 `Start`，等待数据库状态变为 `Active`。
