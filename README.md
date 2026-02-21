@@ -10,7 +10,7 @@
 ├─────────────────────────────────────────────────────────────────────────────┤
 │                                                                              │
 │  ┌─────────┐     ┌─────────┐     ┌─────────┐     ┌─────────┐              │
-│  │  User   │────▶│ Streamlit│────▶│ FastAPI │────▶│  Neo4j  │              │
+│  │  User   │────▶│   Web   │────▶│ FastAPI │────▶│  Neo4j  │              │
 │  │ (Input) │     │   UI    │     │ Backend │     │ GraphDB │              │
 │  └─────────┘     └─────────┘     └─────────┘     └─────────┘              │
 │                                              │           │                   │
@@ -28,7 +28,58 @@
 └─────────────────────────────────────────────────────────────────────────────┘
 ```
 
-## 一键启动
+## 本地开发部署（推荐）
+
+### 前置要求
+
+- Node.js >= 18
+- Python >= 3.10
+- pnpm (前端包管理器)
+
+### 步骤 1：安装前端依赖
+
+```bash
+cd frontend
+pnpm install
+```
+
+### 步骤 2：创建后端 Python 虚拟环境
+
+```bash
+# 在项目根目录创建虚拟环境
+python3 -m venv Insurance-Medicare-GraphRAG-venv
+
+# 激活虚拟环境
+source Insurance-Medicare-GraphRAG-venv/bin/activate  # macOS/Linux
+# 或
+Insurance-Medicare-GraphRAG-venv\Scripts\activate      # Windows
+
+# 安装后端依赖
+pip install -r backend/requirements.txt
+```
+
+> 注意：讯飞星火 LLM API 配置位于 `mock/graphrag-new2.py` 第 17-18 行，需要替换为你的 API Key 和 Secret。
+
+### 步骤 3：启动服务
+
+```bash
+# 终端1：启动后端
+source Insurance-Medicare-GraphRAG-venv/bin/activate
+python mock/graphrag-new2.py
+
+# 终端2：启动前端
+cd frontend
+pnpm dev
+```
+
+### 步骤 4：访问
+
+- 前端: http://localhost:5173
+- 后端 API: http://localhost:8000
+
+## Docker 部署（可选）
+
+如果需要完整版（包含 Neo4j 图数据库）：
 
 ```bash
 # 1. 复制环境配置
@@ -42,12 +93,12 @@ docker compose up --build
 cd frontend
 pnpm install
 pnpm dev
-
-# 4. 访问
-# - 前端: http://localhost:5173
-# - API文档: http://localhost:8000/docs
-# - Neo4j Browser: http://localhost:7474
 ```
+
+访问：
+- 前端: http://localhost:5173
+- API文档: http://localhost:8000/docs
+- Neo4j Browser: http://localhost:7474
 
 ## 快速导入样例图谱
 
@@ -89,7 +140,7 @@ Insurance-Medicare-GraphRAG/
 │   │   ├── App.tsx        # 路由配置
 │   │   └── main.tsx       # 入口文件
 │   ├── package.json
-│   ├── vite.config.ts
+│   ├── vite.config.ts     # Vite 配置（含 API 代理）
 │   └── README.md
 │
 ├── backend/                # FastAPI 后端服务
@@ -99,8 +150,8 @@ Insurance-Medicare-GraphRAG/
 │   │   └── docker-compose.yml
 │   └── README.md
 │
-├── mock/                   # GraphRAG Mock 服务
-│   └── graphrag.py        # Mock 服务脚本
+├── mock/                   # GraphRAG Mock 服务（本地开发用）
+│   └── graphrag-new2.py   # Mock 服务脚本（含本地模板兜底）
 │
 ├── kg/                     # 图谱构建与导入
 │   ├── scripts/
@@ -123,6 +174,8 @@ Insurance-Medicare-GraphRAG/
 ├── scripts/                # 脚本工具
 │   └── run_demo.py        # 批量测试
 │
+├── Insurance-Medicare-GraphRAG-venv/  # Python 虚拟环境（本地开发用）
+│
 ├── .env.example
 └── README.md
 ```
@@ -132,7 +185,7 @@ Insurance-Medicare-GraphRAG/
 | 方法 | 路径 | 说明 |
 |------|------|------|
 | GET | `/health` | 健康检查 |
-| GET | `/api/v1/subgraph?query=...` | 查询子图 |
-| POST | `/api/v1/ask` | 问答接口 |
+| POST | `/api/v1/chat` | 问答接口（返回答案 + 图谱证据） |
+| POST | `/subgraph` | 图谱三元组查询 |
 
 详见 [docs/api_contract.md](docs/api_contract.md)
