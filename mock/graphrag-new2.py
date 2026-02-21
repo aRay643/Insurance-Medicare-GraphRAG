@@ -363,7 +363,7 @@ def get_subgraph(entity_name: str, return_json: bool = True) -> List[Dict] | Lis
     for s, p, o in GRAPH_TRIPLES:
         if standard_entity in (s, o) and p in CORE_RELATIONS:
             json_triples.append({"head": s, "relation": p, "tail": o})
-            text_facts.append(f"{s} 的 {p} 是 {o}")
+            text_facts.append(f"{s} 对 {o} 有关系 {p}")
 
     json_triples = [dict(t) for t in {tuple(d.items()) for d in json_triples}]
     text_facts = list(set(text_facts))
@@ -605,3 +605,4 @@ if __name__ == "__main__":
 
     # 方式3：启动 FastAPI 服务（注释方式1/2，打开方式3）
     uvicorn.run(app, host=API_HOST, port=API_PORT)
+
