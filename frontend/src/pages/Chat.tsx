@@ -3,22 +3,13 @@ import { useNavigate } from 'react-router-dom';
 import { chatAPI } from '../services/api';
 import type { ChatMessage } from '../services/api';
 
-const MOCK_GRAPH = [
-  ["高血压", "在健康告知中被要求如实告知", "护理险", "投保规则"],
-  ["高血压", "通常作为除外责任", "医疗险", "理赔条款"],
-  ["癌症", "等待期通常为", "90天", "投保规则"],
-  ["护理险", "最高投保年龄", "65岁", "投保规则"],
-  ["意外险", "支持投保年龄可达", "80岁", "投保规则"],
-  ["社区卫生中心", "提供", "上门护理服务", "养老服务"],
-  ["阿尔兹海默症", "适合入住", "城市医养结合机构", "养老匹配"],
-  ["城市养老机构", "支持", "异地结算", "医保政策"],
-  ["高血压", "需要长期服用", "降压药", "医学常识"],
-  ["骨折", "术后需要", "康复", "医学常识"]
-];
-
 // 格式化三元组显示
 const formatTriple = (cite: any) => {
-  // 如果是新数据的数组格式
+  // 如果是对象格式（后端返回的 {head, relation, tail}）
+  if (cite && typeof cite === 'object' && !Array.isArray(cite)) {
+    return `(${cite.head}) -- [${cite.relation}] --> (${cite.tail})`;
+  }
+  // 如果是数组格式（旧 Mock 数据格式）
   if (Array.isArray(cite)) {
     // 格式：(主体) -- [谓语] --> (客体) 【来源】
     return `(${cite[0]}) -- [${cite[1]}] --> (${cite[2]})` + (cite[3] ? ` 【${cite[3]}】` : '');
@@ -65,21 +56,12 @@ export default function Chat() {
         id: (Date.now() + 1).toString(),
         role: 'assistant',
         content: response.answer,
-        // 成功时：优先用后端返回的，否则用 Mock
-        citations: response.citations?.length ? response.citations : MOCK_GRAPH,
+        citations: response.citations,
         confidence: response.confidence
       };
       setMessages(prev => [...prev, assistantMessage]);
     } catch (error) {
-      console.error("请求失败:", error); // 建议打印错误以便调试
-      const errorMessage: ChatMessage = {
-        id: (Date.now() + 1).toString(),
-        role: 'assistant',
-        content: '抱歉，请检查后端服务是否启动，或稍后再试。',
-        // 【修改点】在这里也加上 citations，这样报错时也能看到按钮（用于测试 UI）
-        citations: MOCK_GRAPH 
-      };
-      setMessages(prev => [...prev, errorMessage]);
+      console.error("请求失败:", error);
     } finally {
       setLoading(false);
     }
@@ -224,14 +206,14 @@ export default function Chat() {
         />
         <button
           onClick={handleSend}
-          disabled={loading}
+          disabled={loading || !input.trim()}
           style={{
             padding: '4px 16px',
-            background: '#1890ff',
+            background: loading || !input.trim() ? '#d9d9d9' : '#1890ff',
             color: '#fff',
             border: 'none',
             borderRadius: 4,
-            cursor: loading ? 'not-allowed' : 'pointer'
+            cursor: loading || !input.trim() ? 'not-allowed' : 'pointer'
           }}
         >
           发送
