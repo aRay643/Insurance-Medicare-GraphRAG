@@ -279,6 +279,46 @@ async def api_subgraph(request: EntityRequest):
         raise HTTPException(status_code=500, detail=f"接口调用失败：{str(e)}")
 
 
+# ======================== 8.1 新增接口：/api/v1/chat ========================
+class ChatRequest(BaseModel):
+    """Chat 接口请求体"""
+    question: str
+    hop: int = 2
+    limit: int = 20
+
+
+@app.post("/api/v1/chat")
+async def api_chat(request: ChatRequest):
+    """POST /api/v1/chat - 完整 GraphRAG 问答接口"""
+    try:
+        # 1. 提取实体
+        raw_entities = extract_entities(request.question)
+
+        # 2. 查询图谱
+        all_facts = []
+        all_triples = []
+        for entity in raw_entities:
+            triples = get_subgraph(entity, return_json=True)
+            facts = get_subgraph(entity, return_json=False)
+            all_triples.extend(triples)
+            all_facts.extend(facts)
+
+        # 去重
+        all_triples = [dict(t) for t in {tuple(d.items()) for d in all_triples}]
+        all_facts = list(set(all_facts))
+
+        # 3. 生成回答
+        answer = generate_answer(request.question, all_facts)
+
+        return {
+            "answer": answer,
+            "citations": all_triples,
+            "confidence": "高" if all_triples else "低"
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 # ======================== 9. 批量测试函数（20个全场景测试问题） ========================
 def batch_test():
     """批量执行20个不同场景的测试问题"""
@@ -349,7 +389,7 @@ def graph_rag_pipeline(user_query: str) -> str:
 # ======================== 11. 测试/启动入口 ========================
 if __name__ == "__main__":
     # 方式1：批量执行20个测试问题（推荐）
-    batch_test()
+    # batch_test()
 
     # 方式2：单问题测试（注释方式1，打开方式2）
     # test_query = "我有高血压，今年70岁，能买平安e生保护理险吗？"
@@ -357,4 +397,4 @@ if __name__ == "__main__":
     # graph_rag_pipeline(test_query)
 
     # 方式3：启动 FastAPI 服务（注释方式1/2，打开方式3）
-    # uvicorn.run(app, host=API_HOST, port=API_PORT)
+    uvicorn.run(app, host=API_HOST, port=API_PORT)

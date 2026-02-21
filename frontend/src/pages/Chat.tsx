@@ -3,16 +3,18 @@ import { useNavigate } from 'react-router-dom';
 import { chatAPI } from '../services/api';
 import type { ChatMessage } from '../services/api';
 
-// 模拟的三元组数据（后端未完成时使用）
-const MOCK_CITATIONS = [
-  { subject: "原发性高血压", predicate: "被排除在承保范围之外", object: "平安e生保护理险" },
-  { subject: "平安e生保护理险", predicate: "最高投保年龄", object: "65岁" },
-  { subject: "原发性高血压", predicate: "分类为", object: "慢性病" }
-];
-
 // 格式化三元组显示
-const formatTriple = (cite: { subject: string; predicate: string; object: string }) => {
-  return `(${cite.subject}) -- [${cite.predicate}] --> (${cite.object})`;
+const formatTriple = (cite: any) => {
+  // 如果是对象格式（后端返回的 {head, relation, tail}）
+  if (cite && typeof cite === 'object' && !Array.isArray(cite)) {
+    return `(${cite.head}) -- [${cite.relation}] --> (${cite.tail})`;
+  }
+  // 如果是数组格式（旧 Mock 数据格式）
+  if (Array.isArray(cite)) {
+    // 格式：(主体) -- [谓语] --> (客体) 【来源】
+    return `(${cite[0]}) -- [${cite[1]}] --> (${cite[2]})` + (cite[3] ? ` 【${cite[3]}】` : '');
+  }
+  return String(cite);
 };
 
 export default function Chat() {
@@ -54,21 +56,12 @@ export default function Chat() {
         id: (Date.now() + 1).toString(),
         role: 'assistant',
         content: response.answer,
-        // 成功时：优先用后端返回的，否则用 Mock
-        citations: response.citations?.length ? response.citations : MOCK_CITATIONS,
+        citations: response.citations,
         confidence: response.confidence
       };
       setMessages(prev => [...prev, assistantMessage]);
     } catch (error) {
-      console.error("请求失败:", error); // 建议打印错误以便调试
-      const errorMessage: ChatMessage = {
-        id: (Date.now() + 1).toString(),
-        role: 'assistant',
-        content: '抱歉，请检查后端服务是否启动，或稍后再试。',
-        // 【修改点】在这里也加上 citations，这样报错时也能看到按钮（用于测试 UI）
-        citations: MOCK_CITATIONS 
-      };
-      setMessages(prev => [...prev, errorMessage]);
+      console.error("请求失败:", error);
     } finally {
       setLoading(false);
     }
@@ -213,14 +206,14 @@ export default function Chat() {
         />
         <button
           onClick={handleSend}
-          disabled={loading}
+          disabled={loading || !input.trim()}
           style={{
             padding: '4px 16px',
-            background: '#1890ff',
+            background: loading || !input.trim() ? '#d9d9d9' : '#1890ff',
             color: '#fff',
             border: 'none',
             borderRadius: 4,
-            cursor: loading ? 'not-allowed' : 'pointer'
+            cursor: loading || !input.trim() ? 'not-allowed' : 'pointer'
           }}
         >
           发送
