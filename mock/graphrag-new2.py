@@ -8,9 +8,80 @@ import hashlib
 import hmac
 import base64
 import requests
-from datetime import datetime, UTC  # 修复时区警告
+from datetime import datetime, timezone  # 修复时区警告
 from urllib.parse import urlparse
 import re
+from neo4j import GraphDatabase
+import threading
+from contextlib import asynccontextmanager
+
+# neo4j配置
+NEO4J_URI = "bolt://127.0.0.1:7687"
+NEO4J_USER = "neo4j"
+NEO4J_PASSWORD = "88888888"
+NEO4J_DATABASE = "neo4j"
+
+driver = None
+
+def init_neo4j_driver():
+    """初始化 Neo4j 驱动"""
+    global driver
+    driver = GraphDatabase.driver(NEO4J_URI, auth=(NEO4J_USER, NEO4J_PASSWORD))
+
+def close_neo4j_driver():
+    """关闭驱动连接"""
+    if driver:
+        driver.close()
+
+
+# ======================== 节点名缓存（减少全表扫描） ========================
+class NodeCache:
+    """带 TTL 的简单节点名缓存，线程安全。"""
+    def __init__(self, ttl: int = 3600, limit: int = 10000):
+        self.ttl = ttl
+        self.limit = limit
+        self.lock = threading.Lock()
+        self.nodes: List[str] = []
+        self.timestamp = None
+
+    def is_valid(self) -> bool:
+        if not self.timestamp:
+            return False
+        return (datetime.now() - self.timestamp).total_seconds() < self.ttl
+
+    def refresh(self):
+        """从 Neo4j 加载节点名（只加载 name 字段），失败则保持旧缓存。"""
+        if not driver:
+            return
+        try:
+            with driver.session(database=NEO4J_DATABASE) as session:
+                q = f"""
+                MATCH (n)
+                WHERE n.name IS NOT NULL
+                RETURN DISTINCT n.name as name
+                LIMIT {self.limit}
+                """
+                result = session.run(q)
+                names = [rec["name"] for rec in result if rec and rec.get("name")]
+            with self.lock:
+                self.nodes = names
+                self.timestamp = datetime.now()
+        except Exception as e:
+            # 不抛异常，日志输出供排查
+            print(f"⚠️ NodeCache.refresh 失败：{e}")
+
+    def get(self, refresh: bool = False) -> List[str]:
+        with self.lock:
+            if not refresh and self.is_valid() and self.nodes:
+                return self.nodes
+        # 切换到外部刷新以减少锁持有
+        self.refresh()
+        with self.lock:
+            return list(self.nodes)
+
+
+# 全局缓存实例（默认 1 小时）
+node_cache = NodeCache(ttl=3600, limit=10000)
 
 # ======================== 2. 全局配置（替换Key/Secret + 兜底开关） ========================
 # 讯飞星火 LLM 配置
@@ -38,6 +109,67 @@ FALLBACK_ENTITY_RULES = {
 # 年龄提取正则（匹配问题中的数字+岁）
 AGE_PATTERN = re.compile(r"(\d+)岁")
 
+# 优化的模糊匹配工具（优先使用 rapidfuzz，回退到 difflib）
+try:
+    from rapidfuzz import process as _rf_process, fuzz as _rf_fuzz
+    _HAS_RAPIDFUZZ = True
+except Exception:
+    _HAS_RAPIDFUZZ = False
+
+
+def normalize_name(s: str) -> str:
+    """基础字符串规范化：小写、去空白和常见标点，便于匹配"""
+    if not s:
+        return ""
+    s2 = s.strip().lower()
+    # 去掉常见中文/英文标点与空白
+    s2 = re.sub(r"[\s\u3000]+", "", s2)
+    s2 = re.sub(r"[，。,\.;:：;、!！?？\"'()（）\[\]【】]+", "", s2)
+    return s2
+
+
+def get_close_matches_custom(query: str, candidates: List[str], n: int = 1, cutoff: float = 0.5) -> List[str]:
+    """
+    返回与 query 最相近的候选名列表（按相似度降序）。
+    - 尝试使用 rapidfuzz（得分 0..100），回退到 difflib（得分 0..1）。
+    - cutoff 在 0..1 之间表示接受阈值。
+    """
+    if not candidates:
+        return []
+
+    # 规范化 query 与候选（但保留原候选映射）
+    qn = normalize_name(query)
+    mapped = {}
+    normed = []
+    for c in candidates:
+        if not c:
+            continue
+        nc = normalize_name(str(c))
+        if not nc:
+            continue
+        # 如果有重复规范名，保留第一个出现的原始形式
+        if nc not in mapped:
+            mapped[nc] = c
+            normed.append(nc)
+
+    if not normed:
+        return []
+
+    # 使用 rapidfuzz 时，score 范围为 0..100
+    if _HAS_RAPIDFUZZ:
+        results = _rf_process.extract(qn, normed, scorer=_rf_fuzz.WRatio, limit=n)
+        matches = []
+        for name, score, _ in results:
+            if (score / 100.0) >= cutoff:
+                matches.append(mapped.get(name, name))
+        return matches
+
+    # 回退 difflib（cutoff 直接使用）
+    from difflib import get_close_matches as _dl_get
+
+    approx = _dl_get(qn, normed, n=n, cutoff=cutoff)
+    return [mapped.get(x, x) for x in approx]
+
 
 # ======================== 3. 星火 API 签名+调用函数（修复时区警告） ========================
 def get_spark_signature(api_key: str, api_secret: str, url: str, method: str = "POST") -> dict:
@@ -46,7 +178,7 @@ def get_spark_signature(api_key: str, api_secret: str, url: str, method: str = "
     host = parsed_url.netloc
     path = parsed_url.path
     # 修复：使用 timezone-aware 的 UTC 时间
-    now = datetime.now(UTC)
+    now = datetime.now(timezone.utc)
     date = now.strftime("%a, %d %b %Y %H:%M:%S GMT")
     signature_origin = f"host: {host}\ndate: {date}\n{method} {path} HTTP/1.1"
     signature_sha = hmac.new(api_secret.encode('utf-8'), signature_origin.encode('utf-8'),
@@ -98,8 +230,34 @@ def fallback_extract_entities(user_query: str) -> Set[str]:
     return cleaned_entities
 
 
-# ======================== 5. 初始化 FastAPI 应用 ========================
-app = FastAPI(title="保险医疗 GraphRAG API", version="1.0")
+# ======================== 5. 初始化 FastAPI 应用（带生命周期） ========================
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """FastAPI 生命周期：启动时初始化 Neo4j 驱动并预热节点缓存，关闭时释放。"""
+    try:
+        init_neo4j_driver()
+        print("✅ Neo4j 驱动已初始化")
+        # 预热缓存（首次加载节点名）
+        try:
+            node_cache.get(refresh=True)
+            print(f"✅ 节点缓存已预热，{len(node_cache.nodes)} 个节点")
+        except Exception as e:
+            print(f"⚠️ 预热节点缓存失败：{e}")
+    except Exception as e:
+        print(f"⚠️ 启动时初始化 Neo4j 驱动失败：{e}")
+
+    yield
+
+    try:
+        close_neo4j_driver()
+        print("✅ Neo4j 驱动已关闭")
+    except Exception:
+        pass
+
+
+app = FastAPI(title="保险医疗 GraphRAG API", version="1.0", lifespan=lifespan)
 
 # ======================== 6. 模拟知识图谱（原逻辑保留） ========================
 STANDARD_NODES = [
@@ -130,7 +288,9 @@ def extract_entities(user_query: str) -> Set[str]:
                 1. 保险名称（如：平安e生保护理险）；
                 2. 疾病名称（如：原发性高血压、2型糖尿病）；
                 3. 年龄（如：70岁）；
-                输出格式为纯逗号分隔的字符串，无任何多余字符、冒号、换行或解释。"""},
+                4. 药品名称；
+                5. 养老机构或医院名称；
+                如果未发现以上实体则不用提取。输出格式为纯逗号分隔的字符串，无任何多余字符、冒号、换行或解释。"""},
                 {"role": "user", "content": user_query}
             ]
             raw_result = spark_chat_completions(messages, temperature=0.0)
@@ -147,17 +307,64 @@ def extract_entities(user_query: str) -> Set[str]:
 
 
 def get_subgraph(entity_name: str, return_json: bool = True) -> List[Dict] | List[str]:
-    """图谱查询接口（原逻辑保留）"""
-    standard_entity = get_close_matches(entity_name, STANDARD_NODES, n=1, cutoff=0.5)
-    if not standard_entity:
-        return []
-    standard_entity = standard_entity[0]
+    """
+    图谱查询接口（备份逻辑）：
+    - 使用 `get_close_matches_custom` 在模块内 `STANDARD_NODES` 列表中做模糊匹配；
+    - 若匹配到标准实体名，则在硬编码的 `GRAPH_TRIPLES` 中查找并返回相关三元组（当前为兜底数据）。
+    说明：生产环境应将此函数替换为对 Neo4j 的精确/多跳查询。
+    """
+    # 优先使用 Neo4j（通过缓存匹配标准实体名并做精确查询），如不可用则回退到内存三元组
     json_triples = []
     text_facts = []
+
+    # 尝试从 Neo4j 获取
+    try:
+        if driver:
+            candidates = node_cache.get()
+            matches = []
+            if candidates:
+                matches = get_close_matches_custom(entity_name, candidates, n=3, cutoff=0.55)
+
+            # 如果命中候选，则用最优候选在 Neo4j 中做精确查询
+            if matches:
+                standard = matches[0]
+                try:
+                    with driver.session(database=NEO4J_DATABASE) as session:
+                        query = """
+                        MATCH (h)-[r]->(t)
+                        WHERE h.name = $name OR t.name = $name
+                        RETURN h.name as head, type(r) as relation, t.name as tail
+                        LIMIT $limit
+                        """
+                        result = session.run(query, name=standard, limit=50)
+                        for rec in result:
+                            head = rec.get("head")
+                            relation = rec.get("relation")
+                            tail = rec.get("tail")
+                            if head and relation and tail:
+                                json_triples.append({"head": head, "relation": relation, "tail": tail})
+                                text_facts.append(f"{head} 的 {relation} 是 {tail}")
+                except Exception as ee:
+                    print(f"⚠️ Neo4j 查询失败：{ee}")
+
+            if json_triples:
+                json_triples = [dict(t) for t in {tuple(d.items()) for d in json_triples}]
+                text_facts = list(set(text_facts))
+                return json_triples if return_json else text_facts
+    except Exception as e:
+        print(f"⚠️ 使用 Neo4j 检索时出错：{e}")
+
+    # 回退：在内存三元组中查找（兜底）
+    standard_entity_matches = get_close_matches_custom(entity_name, STANDARD_NODES, n=1, cutoff=0.5)
+    if not standard_entity_matches:
+        return []
+    standard_entity = standard_entity_matches[0]
+
     for s, p, o in GRAPH_TRIPLES:
         if standard_entity in (s, o) and p in CORE_RELATIONS:
             json_triples.append({"head": s, "relation": p, "tail": o})
             text_facts.append(f"{s} 的 {p} 是 {o}")
+
     json_triples = [dict(t) for t in {tuple(d.items()) for d in json_triples}]
     text_facts = list(set(text_facts))
     return json_triples if return_json else text_facts
