@@ -87,7 +87,7 @@ test("保险免责条款粒度",
      print_fn=lambda r: print(f"  {r['product']}: {r['cnt']} exclusions"))
 
 test("投保条件 (age_min/age_max)",
-     "MATCH (p:Product)-[r:ELIGIBILITY]->(e:Eligibility) "
+     "MATCH (e:Eligibility)-[r:ELIGIBILITY]->(p:Product) "
      "RETURN p.name AS product, r.age_min AS age_min, r.age_max AS age_max "
      "LIMIT 5",
      print_fn=lambda r: print(f"  {r['product']}: age {r['age_min']}~{r['age_max']}"))
