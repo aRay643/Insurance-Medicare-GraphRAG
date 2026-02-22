@@ -474,23 +474,52 @@ class ChatRequest(BaseModel):
     hop: int = 2
     limit: int = 20
 
+# ======================== 替换原有的 api_chat 函数 ========================
 @app.post("/api/v1/chat")
 async def api_chat(request: ChatRequest):
+    print(f"\n{'='*20} 收到前端请求 {'='*20}")
+    print(f"用户问题: {request.question}")
+
     try:
+        # 1. 提取实体
+        print(">>> 正在提取实体...")
         raw_entities = extract_entities(request.question)
+        print(f"   [提取结果]: {raw_entities}")
+
+        if not raw_entities:
+            print("   [警告]: 未提取到任何实体，后续检索将为空！")
+
+        # 2. 检索图谱
+        print(">>> 正在检索图谱...")
         all_facts, all_triples = [], []
         for entity in raw_entities:
+            print(f"   -> 正在检索实体: {entity}")
             triples = get_subgraph(entity, return_json=True)
             facts = get_subgraph(entity, return_json=False)
+
+            if not triples:
+                print(f"      (实体 '{entity}' 未在图谱/本地数据中匹配到任何三元组)")
+            else:
+                print(f"      (命中 {len(triples)} 条相关信息)")
+
             all_triples.extend(triples)
             all_facts.extend(facts)
 
+        # 去重
         all_triples = [dict(t) for t in {tuple(d.items()) for d in all_triples}]
         all_facts = list(set(all_facts))
+        print(f"   [最终检索到的事实数量]: {len(all_facts)}")
+
+        # 3. 生成回答
+        print(">>> 正在生成回答...")
         answer = generate_answer(request.question, all_facts)
+        print("   [回答生成完毕]")
+        print(f"{'='*20} 请求处理结束 {'='*20}\n")
 
         return {"answer": answer, "citations": all_triples, "confidence": "高" if all_triples else "低"}
     except Exception as e:
+        import traceback
+        traceback.print_exc() # 打印详细报错堆栈
         raise HTTPException(status_code=500, detail=str(e))
 
 # ======================== 9. 批量测试函数 ========================
