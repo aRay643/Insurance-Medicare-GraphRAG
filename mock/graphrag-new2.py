@@ -7,12 +7,8 @@ from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 from typing import List, Dict, Set
 import uvicorn
-import hashlib
-import hmac
-import base64
 import requests
-from datetime import datetime, timezone
-from urllib.parse import urlparse
+from datetime import datetime
 import re
 from neo4j import GraphDatabase
 import threading
@@ -198,65 +194,42 @@ def get_close_matches_custom(query: str, candidates: List[str], n: int = 1, cuto
 
 
 # ======================== 3. 星火 API 签名+调用函数 ========================
-def get_spark_signature(api_key: str, api_secret: str, url: str, method: str = "POST") -> dict:
-    """生成星火 API HMAC 签名头"""
-    parsed_url = urlparse(url)
-    host = parsed_url.netloc
-    path = parsed_url.path
-    now = datetime.now(timezone.utc)
-    date = now.strftime("%a, %d %b %Y %H:%M:%S GMT")
-    signature_origin = f"host: {host}\ndate: {date}\n{method} {path} HTTP/1.1"
-    signature_sha = hmac.new(api_secret.encode('utf-8'), signature_origin.encode('utf-8'),
-                             digestmod=hashlib.sha256).digest()
-    signature_b64 = base64.b64encode(signature_sha).decode('utf-8')
-    authorization = (
-        f'api_key="{api_key}", algorithm="hmac-sha256", headers="host date request-line", signature="{signature_b64}"'
-    )
-    return {
-        "Host": host,
-        "Date": date,
-        "Authorization": authorization,
+def spark_chat_completions(messages: list, temperature: float = 0.0) -> str:
+    """星火 LLM 核心调用函数 (OpenAI 兼容格式)"""
+    if not all([SPARK_API_KEY, SPARK_API_SECRET]):
+        raise ValueError("星火API配置不完整，请检查 .env 文件。")
+
+    url = "https://spark-api-open.xf-yun.com/v1/chat/completions"
+
+    # 直接使用 Bearer APIKey:APISecret 格式进行鉴权
+    headers = {
+        "Authorization": f"Bearer {SPARK_API_KEY}:{SPARK_API_SECRET}",
         "Content-Type": "application/json"
     }
 
-
-def spark_chat_completions(messages: list, temperature: float = 0.0) -> str:
-    """星火 LLM 核心调用函数"""
-    if not all([SPARK_APPID, SPARK_API_KEY, SPARK_API_SECRET]):
-        raise ValueError("星火API配置不完整，请检查 .env 文件。")
-    
-    url = "https://spark-api-open.xf-yun.com/v1/chat/completions"
-    headers = get_spark_signature(SPARK_API_KEY, SPARK_API_SECRET, url)
+    # 使用 OpenAI 标准的 Payload 格式
     payload = {
-        "header": {
-            "app_id": SPARK_APPID
-        },
-        "parameter": {
-            "chat": {
-                "domain": "general", # 使用通用领域
-                "temperature": temperature,
-                "max_tokens": 2048
-            }
-        },
-        "payload": {
-            "message": {
-                "text": messages
-            }
-        }
+        "model": SPARK_MODEL,
+        "messages": messages,
+        "temperature": temperature,
+        "max_tokens": 2048
     }
+
     try:
         response = requests.post(url=url, headers=headers, json=payload, timeout=30)
-        response.raise_for_status()
+
+        # 如果依然报错，把服务端的详细错误信息打印出来
+        if response.status_code != 200:
+            print(f"星火服务端返回错误: {response.text}")
+            response.raise_for_status()
+
         result = response.json()
 
-        # 根据星火v1.5/v2.0的返回格式解析
-        if "payload" in result and "choices" in result["payload"]:
-             return result["payload"]["choices"]["text"][0]["content"].strip()
+        # 按照 OpenAI 格式解析返回的 JSON 结果
+        if "choices" in result and len(result["choices"]) > 0:
+             return result["choices"][0]["message"]["content"].strip()
         else:
-            # 兼容旧版或处理错误
-            code = result.get("header", {}).get("code", -1)
-            message = result.get("header", {}).get("message", "未知错误")
-            raise Exception(f"星火API返回格式错误或请求失败: Code={code}, Message={message}")
+            raise Exception(f"星火API返回格式不符合预期: {result}")
 
     except Exception as e:
         raise Exception(f"星火 API 调用失败：{str(e)}")
