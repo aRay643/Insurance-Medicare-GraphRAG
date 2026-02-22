@@ -1,10 +1,13 @@
+import os
 from difflib import get_close_matches
 from openai import OpenAI
 
-# 1. 初始化客户端
+api_key = os.getenv("OPENAI_API_KEY", "API_KEY")
+base_url = os.getenv("OPENAI_BASE_URL", "https://spark-api-open.xf-yun.com/v1")
+
 client = OpenAI(
-    api_key="API_KEY", 
-    base_url="https://spark-api-open.xf-yun.com/v1"
+    api_key=api_key,
+    base_url=base_url
 )
 
 # 2. 模拟图谱数据

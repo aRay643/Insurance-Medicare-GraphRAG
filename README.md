@@ -58,7 +58,7 @@ Insurance-Medicare-GraphRAG-venv\Scripts\activate      # Windows
 pip install -r backend/requirements.txt
 ```
 
-> 注意：讯飞星火 LLM API 配置位于 `mock/graphrag-new2.py` 第 17-18 行，需要替换为你的 API Key 和 Secret。
+> 注意：讯飞星火 LLM API 配置位于 `mock/.env.example` 文件中，需要替换为你的 API Key 和 Secret。
 
 ### 步骤 3：启动服务
 

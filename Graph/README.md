@@ -79,16 +79,16 @@ pip install -r requirements.txt
 
 ```bash
 # 全量导入（清空后重导）
-python scripts/import_to_neo4j.py --clear
+python Graph/scripts/import_to_neo4j.py --clear
 
 # 增量导入（保留已有数据）
-python scripts/import_to_neo4j.py
+python Graph/scripts/import_to_neo4j.py
 ```
 
 ### 3. 验证导入
 
 ```bash
-python scripts/test_neo4j.py
+python Graph/scripts/test_neo4j.py
 ```
 
 ## 🔗 知识图谱 Schema
