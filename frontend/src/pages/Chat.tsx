@@ -2,6 +2,8 @@ import { useState, useRef, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { chatAPI } from '../services/api';
 import type { ChatMessage } from '../services/api';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 
 // 格式化三元组显示
 const formatTriple = (cite: any) => {
@@ -123,9 +125,25 @@ export default function Chat() {
                   background: '#fff',
                   padding: '12px 16px',
                   borderRadius: 8,
-                  boxShadow: '0 1px 2px rgba(0,0,0,0.1)'
+                  boxShadow: '0 1px 2px rgba(0,0,0,0.1)',
+                  lineHeight: '1.6',
+                  whiteSpace: item.role === 'user' ? 'pre-wrap' : 'normal',
+                  wordBreak: 'break-word'
                 }}>
-                  {item.content}
+                  {item.role === 'assistant' ? (
+                    <ReactMarkdown
+                      remarkPlugins={[remarkGfm]}
+                      components={{
+                        p: ({node, ...props}) => <p style={{ margin: '0 0 10px 0' }} {...props} />,
+                        ul: ({node, ...props}) => <ul style={{ margin: '0 0 10px 0', paddingLeft: '20px' }} {...props} />,
+                        ol: ({node, ...props}) => <ol style={{ margin: '0 0 10px 0', paddingLeft: '20px' }} {...props} />,
+                      }}
+                    >
+                      {item.content}
+                    </ReactMarkdown>
+                  ) : (
+                    item.content
+                  )}
                 </div>
                 {/* 证据展示部分 - 仅 AI 消息显示 */}
                 {item.role === 'assistant' && item.citations && item.citations.length > 0 && (

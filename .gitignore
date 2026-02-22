@@ -28,6 +28,8 @@ build/
 .env
 .env.local
 .env.*.local
+.env.example
+Insurance-Medicare-Graphrag-venv/
 
 # Data and outputs
 data/
