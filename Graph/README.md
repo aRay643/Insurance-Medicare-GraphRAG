@@ -6,13 +6,27 @@
 
 | 指标 | 数量 |
 |------|------|
-| 节点总数 | 60,515 |
-| 关系总数 | 118,896 |
-| 保险产品 | 128 |
+| 节点总数 | 60,527 |
+| 关系总数 | 118,968 |
+| 保险产品 | 105 |
 | 养老机构 | 56,368 |
-| 药品实体 | 128 (含品牌/公司) |
-| 疾病实体 | 136 |
-| 跨域路径 | 15,899 |
+| 药品实体 | 28 |
+| 疾病/医疗项目 | 300+ |
+| 保障项目 | 400+ |
+| 免责条款 | 600+ |
+
+## 🎯 数据质量 (v2.2)
+
+| 指标 | 覆盖率 |
+|------|--------|
+| ELIGIBILITY (投保条件) | **100.0%** (105/105) |
+| COVERS (保障责任) | **100.0%** (105/105) |
+
+**最近更新** (2026-02-23):
+- ✅ 为25个产品补充了ELIGIBILITY数据
+- ✅ 为24个产品补充了COVERS数据
+- ✅ 修复产品名称错误和重复数据
+- ✅ 清理无效节点
 
 ## 🏗️ 项目结构
 
@@ -95,67 +109,97 @@ python Graph/scripts/test_neo4j.py
 
 ### 节点类型
 
-| 标签 | 说明 | 来源 |
+| 标签 | 说明 | 数量 |
 |------|------|------|
-| `Product` | 保险产品 / 药品 | 保险 + 药品 |
-| `ProductCategory` | 保险类别（医疗/养老/护理等） | 保险 |
-| `Benefit` | 保障项目 | 保险 |
-| `Exclusion` | 免责条款 | 保险 |
-| `Condition` | 合同条件（犹豫期等） | 保险 + 种子 |
-| `Eligibility` | 投保资格 | 保险 |
-| `Medical` | 疾病/适应症 | 保险 + 药品 |
-| `Brand` | 药品商品名 | 药品 |
-| `Company` | 制药公司 | 药品 |
-| `Insurance` | 药品目录 | 药品 |
-| `Org` | 养老机构 | 养老 |
-| `District` | 区/县 | 养老 |
-| `Province` | 省/直辖市 | 养老 |
-| `Service` | 服务类型 | 养老 + 保险 |
+| `Product` | 保险产品 / 药品 | 133 |
+| `ProductCategory` | 保险类别 | - |
+| `Benefit` | 保障项目 | 400+ |
+| `Exclusion` | 免责条款 | 600+ |
+| `Condition` | 合同条件（犹豫期等） | - |
+| `Eligibility` | 投保资格 | - |
+| `Medical` | 疾病/医疗项目 | 300+ |
+| `Brand` | 药品商品名 | - |
+| `Company` | 制药公司 | - |
+| `Insurance` | 药品目录 | - |
+| `Org` | 养老机构 | 56,368 |
+| `District` | 区/县 | - |
+| `Province` | 省/直辖市 | - |
+| `Service` | 服务类型 | - |
 
 ### 关系类型
 
-| 关系 | 说明 |
-|------|------|
-| `COVERS` | 保险产品 → 保障项目 |
-| `HAS_EXCLUSION` | 保险产品 → 免责条款 |
-| `BELONGS_TO_CATEGORY` | 保险产品 → 产品类别 |
-| `ELIGIBILITY` | 保险产品 → 投保资格 |
-| `TREATS` | 药品 → 疾病 |
-| `HAS_TRADE_NAME` | 药品 → 商品名 |
-| `PRODUCED_BY` | 药品 → 制药公司 |
-| `LOCATED_IN` | 养老机构 → 区域 |
-| `PROVIDES_SERVICE` | 养老机构 → 服务类型 |
-| `SUITABLE_FOR` | 服务类型 → 保险类别（跨域桥接） |
+| 关系 | 说明 | 数量 |
+|------|------|------|
+| `COVERS` | 保险产品 → 保障项目 | 269 |
+| `HAS_EXCLUSION` | 保险产品 → 免责条款 | 704 |
+| `BELONGS_TO_CATEGORY` | 保险产品 → 产品类别 | 112 |
+| `ELIGIBILITY` | 投保资格 → 保险产品 | 107 |
+| `TREATS` | 药品 → 疾病 | - |
+| `HAS_TRADE_NAME` | 药品 → 商品名 | - |
+| `PRODUCED_BY` | 药品 → 制药公司 | - |
+| `LOCATED_IN` | 养老机构 → 区域 | 56,880 |
+| `PROVIDES_SERVICE` | 养老机构 → 服务类型 | 56,775 |
+| `COVERED_BY` | 疾病 → 保险产品 | 107 |
+| `COVERS_DISEASE` | 保障项目 → 疾病 | 55 |
+| `COVERS_TREATMENT` | 保障项目 → 治疗 | 8 |
 
-### 跨域查询路径
+### 跨域连接
 
-```
-养老机构(Org) →[PROVIDES_SERVICE]→ 服务(Service)
-    →[SUITABLE_FOR]→ 保险类别(ProductCategory)
-        ←[BELONGS_TO_CATEGORY]← 保险产品(Product)
-```
+| 跨域关系 | 说明 | 状态 |
+|---------|------|------|
+| Medical → Product | 疾病被保险产品覆盖 | ✅ 107条 |
+| Product → Medical | 药品治疗疾病 | ✅ 已实现 |
+| Benefit → Medical | 保障项目覆盖疾病 | ✅ 55条 |
+| Product → Service | 保险产品包含服务 | ✅ 34条 |
+| Org → Product | 养老机构关联保险 | ⚠️ 待完善 |
+
+## 🏥 养老机构分类
+
+养老机构按提供的服务类型分为10类：
+
+| 服务类型 | 机构数量 | 占比 |
+|---------|---------|------|
+| 政府敬老服务 | 18,351 | 32.3% |
+| 通用养老 | 17,889 | 31.5% |
+| 机构养老 | 13,738 | 24.2% |
+| 综合福利服务 | 2,712 | 4.8% |
+| 专业护理 | 1,107 | 1.9% |
+| 农村互助养老 | 979 | 1.7% |
+| 社区养老 | 790 | 1.4% |
+| 医养结合 | 663 | 1.2% |
+| 康复服务 | 282 | 0.5% |
+| 居家养老 | 264 | 0.5% |
 
 ## 📖 业务场景示例
 
 ```cypher
--- 场景1: 查找北京有医疗设施的养老机构
-MATCH (o:Org)-[r:LOCATED_IN]->(d:District)-[:BELONGS_TO]->(p:Province {name: '北京市'})
-WHERE r.has_medical_facility = true
-RETURN o.name, d.name, r.bed_count
-ORDER BY r.bed_count DESC LIMIT 10
+-- 场景1: 查找覆盖某种疾病的保险产品
+MATCH (m:Medical)-[r:COVERED_BY]->(p:Product)
+WHERE m.name CONTAINS '恶性肿瘤'
+RETURN p.name, m.name
 
--- 场景2: 查找治疗肺癌的药品及品牌
+-- 场景2: 查找治疗某种疾病的药品
 MATCH (p:Product)-[r:TREATS]->(m:Medical)
-WHERE m.name CONTAINS '肺癌'
-OPTIONAL MATCH (p)-[:HAS_TRADE_NAME]->(b:Brand)
-RETURN p.name, b.name, r.indication_limit
+WHERE m.name CONTAINS '白血病'
+RETURN p.name, m.name
 
--- 场景3: 跨域 - 为养老机构推荐保险产品
-MATCH (o:Org)-[:PROVIDES_SERVICE]->(s:Service)
-      -[:SUITABLE_FOR]->(pc:ProductCategory)
-      <-[:BELONGS_TO_CATEGORY]-(p:Product)
-WHERE o.name CONTAINS '护理'
-RETURN DISTINCT o.name, s.name, pc.name, p.name
+-- 场景3: 查找某年龄段可投保的产品
+MATCH (p:Product)<-[e:ELIGIBILITY]-(elig:Eligibility)
+WHERE e.age_min <= 30 AND e.age_max >= 30
+RETURN p.name, e.age_min, e.age_max
+
+-- 场景4: 查找医养结合的养老机构
+MATCH (o:Org)-[:PROVIDES_SERVICE]->(s:Service {name: '医养结合'})
+MATCH (o)-[:LOCATED_IN]->(d:District)
+RETURN o.name, d.name
+
+-- 场景5: 查找保险产品的保障项目和免责条款
+MATCH (p:Product {name: '国寿康惠团体终身重大疾病保险（尊享版）'})
+OPTIONAL MATCH (p)-[c:COVERS]->(b:Benefit)
+OPTIONAL MATCH (p)-[e:HAS_EXCLUSION]->(ex:Exclusion)
+RETURN p.name,
+       collect(DISTINCT b.name) as benefits,
+       collect(DISTINCT ex.name) as exclusions
 ```
 
 ## ⚙️ 配置
@@ -177,3 +221,16 @@ NEO4J_DATABASE = "neo4j"
 4. **JSON 输出** → 提取结果保存为 JSON 三元组格式至 `db_data/*_v2/` 目录
 5. **Neo4j 导入** → 运行 `scripts/import_to_neo4j.py`
 6. **验证测试** → 运行 `scripts/test_neo4j.py`
+
+## 📝 更新日志
+
+### v2.2 (2026-02-23)
+- 补充25个产品的ELIGIBILITY数据
+- 补充24个产品的COVERS数据
+- 修复产品名称错误和重复数据
+- 清理无效节点
+- ELIGIBILITY和COVERS覆盖率达到100%
+
+### v2.1 (2026-02-21)
+- 增强保障项目属性
+- 添加报销比例、给付比例等属性
