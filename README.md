@@ -161,17 +161,17 @@ pnpm dev
 
 | 指标 | 数量 |
 |------|------|
-| 节点总数 | **91,899** |
-| 关系总数 | **597,563** |
+| 节点总数 | **83,105** |
+| 关系总数 | **385,769** |
 | 保险产品 | 105 |
 | 养老机构 | 56,368 |
 | 药品实体 | 23 |
 | 疾病百科 (Disease) | 8,807 |
-| 症状 (Symptom) | 5,998 |
+| 症状 (Symptom) | 5,997 |
 | 治疗方式 (Treatment) | 544 |
 | 检查项目 (CheckItem) | 3,353 |
-| 就诊科室 (Department) | 54 |
-| 疾病/医疗项目 (Medical) | 8,924 |
+| 就诊科室 (Department) | 49 |
+| 疾病/医疗项目 (Medical) | 136 |
 | 保障项目 (Benefit) | 166 |
 | 免责条款 (Exclusion) | 177 |
 
@@ -206,19 +206,34 @@ pnpm dev
 
 #### 关系类型
 
+##### 疾病百科关系
+
 | 关系 | 说明 | 数量 |
 |------|------|------|
-| `CAN_BE_TREATED_BY` | 疾病可被药品治疗 (Disease → Product) | 59,738 |
-| `TREATS_DISEASE` | 药品治疗疾病 (Product → Disease) | 59,738 |
-| `HAS_SYMPTOM` | 疾病具有症状 (Disease/Medical → Symptom) | 54,695 |
-| `REQUIRES_CHECK` | 疾病需要检查项目 (Disease → CheckItem) | 39,531 |
-| `CURED_BY` | 疾病可采用治疗方式 (Disease → Treatment) | 21,049 |
-| `COVERED_BY` | 疾病被保险产品承保 (Medical → Product) | 107 |
-| `HAS_COMPLICATION` | 疾病引起并发症 (Disease → Disease) | 12,052 |
+| `CAN_BE_TREATED_BY` | 疾病可被药品治疗 (Disease → Product) | 59,736 |
+| `TREATS_DISEASE` | 药品治疗疾病 (Product → Disease) | 59,736 |
+| `HAS_SYMPTOM` | 疾病具有症状 (Disease → Symptom) | 54,695 |
+| `REQUIRES_CHECK` | 疾病需要检查项目 (Disease → CheckItem) | 39,418 |
+| `CURED_BY` | 疾病可采用治疗方式 (Disease → Treatment) | 21,047 |
+| `HAS_COMPLICATION` | 疾病引起并发症 (Disease → Disease) | 12,024 |
 | `TREATED_AT` | 疾病就医科室 (Disease → Department) | 11,338 |
+| `HAS_ATTRIBUTE` | 疾病属性信息 (Disease → Disease) | 8,807 |
+
+##### 保险域关系
+
+| 关系 | 说明 | 数量 |
+|------|------|------|
 | `COVERS` | 保险产品保障项目 (Product → Benefit) | 275 |
 | `HAS_EXCLUSION` | 保险产品免责条款 (Product → Exclusion) | 705 |
+| `COVERED_BY` | 疾病被保险产品承保 (Medical → Product) | 107 |
+| `ELIGIBILITY` | 投保资格关系 (Product → Eligibility) | 107 |
+| `COVERS_DISEASE` | 保障疾病 (Benefit → Medical) | 55 |
 | `BELONGS_TO_CATEGORY` | 产品归属类别 (Product → ProductCategory) | 112 |
+
+##### 养老机构关系
+
+| 关系 | 说明 | 数量 |
+|------|------|------|
 | `LOCATED_IN` | 机构所在区域 (Org → District) | 56,880 |
 | `PROVIDES_SERVICE` | 机构提供服务 (Org → Service) | 56,775 |
 
@@ -226,11 +241,15 @@ pnpm dev
 
 | 跨域关系 | 说明 | 状态 | 数量 |
 |---------|------|------|------|
-| Medical → Product | 疾病被保险产品覆盖 | ✅ | 107条 |
-| Product → Medical | 药品治疗疾病 | ✅ | 已实现 |
-| Disease → Product | 疾病百科推荐药品 | ✅ | 59,738条 |
+| Disease → Product | 疾病百科推荐药品 | ✅ | 59,736条 |
 | Disease → Symptom | 疾病症状 | ✅ | 54,695条 |
+| Disease → Treatment | 疾病治疗方式 | ✅ | 21,047条 |
+| Disease → CheckItem | 疾病检查项目 | ✅ | 39,418条 |
+| Disease → Department | 疾病就诊科室 | ✅ | 11,338条 |
+| Medical → Product | 疾病被保险产品承保 | ✅ | 107条 |
 | Benefit → Medical | 保障项目覆盖疾病 | ✅ | 55条 |
+| Product → Disease | 药品治疗疾病 | ✅ | 59,736条 |
+| Service → ProductCategory | 服务适配保险类别 | ✅ | 4条 |
 
 详见 [Graph/README.md](Graph/README.md)
 
