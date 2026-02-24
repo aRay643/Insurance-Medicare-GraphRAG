@@ -1,6 +1,6 @@
 import axios from 'axios';
 
-const API_BASE_URL = '/api/v1';
+const API_BASE_URL = 'http://127.0.0.1:8000/api/v1'; // 加上 http://127.0.0.1:8000
 
 // Mock 数据 - 用于后端未就绪时的兜底
 const MOCK_RESPONSE = {
@@ -18,14 +18,14 @@ export interface ChatMessage {
   id: string;
   role: 'user' | 'assistant';
   content: string;
-  citations?: string[][];
+  citations?: (string[] | { head: string; relation: string; tail: string })[];
   confidence?: string;
 }
 
 export const chatAPI = {
   ask: async (question: string): Promise<{
     answer: string;
-    citations: string[][];
+    citations: (string[] | { head: string; relation: string; tail: string })[];
     confidence: string;
   }> => {
     try {
