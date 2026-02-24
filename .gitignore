@@ -28,6 +28,8 @@ build/
 .env
 .env.local
 .env.*.local
+.env.example
+Insurance-Medicare-Graphrag-venv/
 
 # Data and outputs
 data/
@@ -48,3 +50,7 @@ package-lock.json
 # Project specific PDFs
 *.pdf
 !README*.pdf
+Graph/docs/data_enhancement_plan.md
+Graph/scripts/sync_to_json.py
+Graph/scripts/incremental_extract.py
+Graph/scripts/collab_extract.py

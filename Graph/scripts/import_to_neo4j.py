@@ -335,7 +335,7 @@ def import_batch(tx, batch, domain):
             f"UNWIND $params AS p "
             f"MERGE (s:`{subj_type}` {{name: p.sn}}) "
             # V6 改进：MERGE 时设置 source_domain
-            f"ON CREATE SET s.source_domain = p.props.source_domain " 
+            f"ON CREATE SET s.source_domain = p.props.source_domain "
             f"MERGE (o:`{obj_type}` {{name: p.on}}) "
             f"ON CREATE SET o.source_domain = p.props.source_domain "
             f"MERGE (s)-[r:`{predicate}`]->(o) "

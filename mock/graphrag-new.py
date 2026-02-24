@@ -1,4 +1,5 @@
 # ======================== 1. 导入所有核心依赖（含星火签名所需） ========================
+import os
 from difflib import get_close_matches
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
@@ -12,11 +13,10 @@ import requests
 from datetime import datetime
 from urllib.parse import urlparse
 
-# ======================== 2. 全局配置（仅需替换此处的 APIKey/APISecret） ========================
-# 讯飞星火 LLM 配置（解决 401 签名错误的核心）
-SPARK_API_KEY = "APIkey"  # 替换为控制台的 APIKey
-SPARK_API_SECRET = "APISecret"  # 替换为控制台的 APISecret
-SPARK_MODEL = "lite"  # 星火轻量版（免费够用）
+# ======================== 2. 全局配置（从环境变量读取） ========================
+SPARK_API_KEY = os.getenv("SPARK_API_KEY", "your_api_key_here")
+SPARK_API_SECRET = os.getenv("SPARK_API_SECRET", "your_api_secret_here")
+SPARK_MODEL = "lite"
 
 # FastAPI 服务配置
 API_HOST = "0.0.0.0"
