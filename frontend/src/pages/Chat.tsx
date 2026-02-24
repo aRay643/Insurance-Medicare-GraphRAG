@@ -151,7 +151,7 @@ export default function Chat() {
       };
       setMessages(prev => [...prev, assistantMessage]);
     } catch (error) {
-      console.error("请求失败:", error);
+      console.error("请求失败:", parseErrorMessage(error));
       const errorMsg = parseErrorMessage(error);
       const errorMessage: ChatMessage = {
         id: (Date.now() + 1).toString(),
