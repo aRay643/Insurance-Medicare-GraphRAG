@@ -157,52 +157,80 @@ pnpm dev
 
 ## 数据库说明
 
-### 数据规模
+### 数据规模 (v2.3)
 
 | 指标 | 数量 |
 |------|------|
-| 节点总数 | 60,515 |
-| 关系总数 | 118,896 |
-| 保险产品 | 128 |
+| 节点总数 | **91,899** |
+| 关系总数 | **597,563** |
+| 保险产品 | 105 |
 | 养老机构 | 56,368 |
-| 药品实体 | 128 (含品牌/公司) |
-| 疾病实体 | 136 |
-| 跨域路径 | 15,899 |
+| 药品实体 | 23 |
+| 疾病百科 (Disease) | 8,807 |
+| 症状 (Symptom) | 5,998 |
+| 治疗方式 (Treatment) | 544 |
+| 检查项目 (CheckItem) | 3,353 |
+| 就诊科室 (Department) | 54 |
+| 疾病/医疗项目 (Medical) | 8,924 |
+| 保障项目 (Benefit) | 166 |
+| 免责条款 (Exclusion) | 177 |
+
+### 数据质量
+
+| 指标 | 覆盖率 |
+|------|--------|
+| ELIGIBILITY (投保条件) | **100.0%** (105/105) |
+| COVERS (保障责任) | **100.0%** (105/105) |
 
 ### Schema 定义
 
 #### 节点类型
 
-| 标签 | 说明 |
-|------|------|
-| `Product` | 保险产品 / 药品 |
-| `ProductCategory` | 保险类别（医疗/养老/护理等） |
-| `Benefit` | 保障项目 |
-| `Exclusion` | 免责条款 |
-| `Condition` | 合同条件（犹豫期等） |
-| `Eligibility` | 投保资格 |
-| `Medical` | 疾病/适应症 |
-| `Brand` | 药品商品名 |
-| `Company` | 制药公司 |
-| `Org` | 养老机构 |
-| `District` | 区/县 |
-| `Province` | 省/直辖市 |
-| `Service` | 服务类型 |
+| 标签 | 说明 | 数量 |
+|------|------|------|
+| `Product` | 保险产品 / 药品 | 3,956 |
+| `Disease` | 疾病百科 | 8,807 |
+| `Medical` | 疾病(保险相关)/手术/治疗 | 8,924 |
+| `Symptom` | 症状 | 5,998 |
+| `CheckItem` | 检查项目 | 3,353 |
+| `Org` | 养老机构 | 56,368 |
+| `District` | 区/县 | 3,369 |
+| `Treatment` | 治疗方式 | 544 |
+| `Department` | 就诊科室 | 54 |
+| `Benefit` | 保障项目 | 166 |
+| `Exclusion` | 免责条款 | 177 |
+| `Condition` | 合同条件 | 42 |
+| `Service` | 服务类型 | 30 |
+| `ProductCategory` | 保险类别 | 15 |
+| `Eligibility` | 投保资格 | 11 |
 
 #### 关系类型
 
-| 关系 | 说明 |
-|------|------|
-| `COVERS` | 保险产品 → 保障项目 |
-| `HAS_EXCLUSION` | 保险产品 → 免责条款 |
-| `BELONGS_TO_CATEGORY` | 保险产品 → 产品类别 |
-| `ELIGIBILITY` | 保险产品 → 投保资格 |
-| `TREATS` | 药品 → 疾病 |
-| `HAS_TRADE_NAME` | 药品 → 商品名 |
-| `PRODUCED_BY` | 药品 → 制药公司 |
-| `LOCATED_IN` | 养老机构 → 区域 |
-| `PROVIDES_SERVICE` | 养老机构 → 服务类型 |
-| `SUITABLE_FOR` | 服务类型 → 保险类别（跨域桥接） |
+| 关系 | 说明 | 数量 |
+|------|------|------|
+| `CAN_BE_TREATED_BY` | 疾病可被药品治疗 (Disease → Product) | 59,738 |
+| `TREATS_DISEASE` | 药品治疗疾病 (Product → Disease) | 59,738 |
+| `HAS_SYMPTOM` | 疾病具有症状 (Disease/Medical → Symptom) | 54,695 |
+| `REQUIRES_CHECK` | 疾病需要检查项目 (Disease → CheckItem) | 39,531 |
+| `CURED_BY` | 疾病可采用治疗方式 (Disease → Treatment) | 21,049 |
+| `COVERED_BY` | 疾病被保险产品承保 (Medical → Product) | 107 |
+| `HAS_COMPLICATION` | 疾病引起并发症 (Disease → Disease) | 12,052 |
+| `TREATED_AT` | 疾病就医科室 (Disease → Department) | 11,338 |
+| `COVERS` | 保险产品保障项目 (Product → Benefit) | 275 |
+| `HAS_EXCLUSION` | 保险产品免责条款 (Product → Exclusion) | 705 |
+| `BELONGS_TO_CATEGORY` | 产品归属类别 (Product → ProductCategory) | 112 |
+| `LOCATED_IN` | 机构所在区域 (Org → District) | 56,880 |
+| `PROVIDES_SERVICE` | 机构提供服务 (Org → Service) | 56,775 |
+
+#### 跨域连接
+
+| 跨域关系 | 说明 | 状态 | 数量 |
+|---------|------|------|------|
+| Medical → Product | 疾病被保险产品覆盖 | ✅ | 107条 |
+| Product → Medical | 药品治疗疾病 | ✅ | 已实现 |
+| Disease → Product | 疾病百科推荐药品 | ✅ | 59,738条 |
+| Disease → Symptom | 疾病症状 | ✅ | 54,695条 |
+| Benefit → Medical | 保障项目覆盖疾病 | ✅ | 55条 |
 
 详见 [Graph/README.md](Graph/README.md)
 

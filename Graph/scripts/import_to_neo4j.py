@@ -248,7 +248,9 @@ def create_constraints_and_indexes(session):
         "Product", "Medical", "Brand", "Company", "Insurance",
         "Benefit", "Condition", "Exclusion", "Eligibility",
         "Org", "District", "Province",
-        "ProductCategory", "Service"  # V6 新增标签
+        "ProductCategory", "Service",  # V6 新增标签
+        # medical_triplets.json 新增节点类型
+        "Disease", "Symptom", "Treatment", "Department", "CheckItem"
     ]
 
     for label in labels:

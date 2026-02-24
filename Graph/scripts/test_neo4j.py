@@ -498,6 +498,102 @@ if __name__ == "__main__":
          table_headers=["产品", "天数"])
 
     # ============================================================
+    # 12. 疾病与医疗域查询 (新增)
+    # ============================================================
+    print(f"\n{Colors.OKCYAN}━━━ 疾病与医疗域查询 ━━━{Colors.ENDC}")
+
+    test("常见疾病的主次症状",
+         "MATCH (d:Disease)-[:HAS_SYMPTOM]->(s:Symptom) "
+         "WITH d, collect(s.name) AS symptoms "
+         "RETURN d.name AS disease, symptoms[0..5] AS top_symptoms, size(symptoms) AS cnt "
+         "ORDER BY cnt DESC LIMIT 5",
+         use_table=True,
+         table_headers=["疾病", "主要症状", "症状总数"])
+
+    test("疾病及其关联并发症",
+         "MATCH (d:Disease)-[:HAS_COMPLICATION]->(c:Disease) "
+         "WITH d, collect(c.name) AS complications "
+         "RETURN d.name AS disease, complications[0..5] AS comps, size(complications) AS cnt "
+         "ORDER BY cnt DESC LIMIT 5",
+         use_table=True,
+         table_headers=["疾病", "常见并发症", "并发症数量"])
+
+    test("重点科室涵盖的疾病统计",
+         "MATCH (d:Disease)-[:TREATED_AT]->(dept:Department) "
+         "WITH dept, count(d) AS disease_cnt "
+         "RETURN dept.name AS department, disease_cnt "
+         "ORDER BY disease_cnt DESC LIMIT 5",
+         use_table=True,
+         table_headers=["科室", "诊疗疾病数"])
+
+    test("疾病与药品的跨域关联（新版）",
+         "MATCH (d:Disease)-[:CAN_BE_TREATED_BY]->(p:Product) "
+         "WITH d, collect(p.name) AS drugs "
+         "RETURN d.name AS disease, drugs[0..3] AS recomm_drugs, size(drugs) AS cnt "
+         "ORDER BY cnt DESC LIMIT 5",
+         use_table=True,
+         table_headers=["疾病", "推荐药品", "药品数量"])
+
+    test("各类治疗方式与受治疾病",
+         "MATCH (d:Disease)-[:CURED_BY]->(t:Treatment) "
+         "WITH t, count(d) AS disease_cnt "
+         "RETURN t.name AS treatment, disease_cnt "
+         "ORDER BY disease_cnt DESC LIMIT 5",
+         use_table=True,
+         table_headers=["治疗方式", "适用疾病数"])
+
+    test("常规检查项目统计",
+         "MATCH (d:Disease)-[:REQUIRES_CHECK]->(c:CheckItem) "
+         "WITH c, count(d) AS disease_cnt "
+         "RETURN c.name as check_item, disease_cnt "
+         "ORDER BY disease_cnt DESC LIMIT 5",
+         use_table=True,
+         table_headers=["检查项目", "相关疾病数"])
+
+    # ============================================================
+    # 13. 新增关系类型专项测试 (v2.3新增)
+    # ============================================================
+    print(f"\n{Colors.OKCYAN}━━━ 新增关系类型专项测试 ━━━{Colors.ENDC}")
+
+    test("TREATS_DISEASE: 药品治疗疾病百科",
+         "MATCH (p:Product)-[r:TREATS_DISEASE]->(d:Disease) "
+         "RETURN p.name AS 药品, d.name AS 疾病 "
+         "LIMIT 10",
+         use_table=True,
+         table_headers=["药品", "疾病百科"])
+
+    test("HAS_ATTRIBUTE: 疾病属性存储",
+         "MATCH (d:Disease)-[r:HAS_ATTRIBUTE]->(d:Disease) "
+         "WHERE d.name = '肺泡蛋白质沉积症' "
+         "RETURN d.name AS 疾病, keys(r)[1..5] AS 属性 "
+         "LIMIT 1",
+         print_fn=lambda r: print(f"  疾病: {r['疾病']}"))
+
+    test("疾病百科与保险疾病关联 (名称匹配)",
+         "MATCH (d1:Disease) "
+         "MATCH (m:Medical) "
+         "WHERE m.name CONTAINS d1.name OR d1.name CONTAINS m.name "
+         "MATCH (m)-[r:COVERED_BY]->(p:Product) "
+         "RETURN DISTINCT d1.name AS 疾病百科, m.name AS 保险疾病, p.name AS 保险产品 "
+         "LIMIT 10",
+         use_table=True,
+         table_headers=["疾病百科", "保险疾病", "保险产品"])
+
+    test("完整跨域路径: 疾病百科 → 药品 → 保险",
+         "MATCH (d:Disease {name: '冠心病'})-[:CAN_BE_TREATED_BY]->(p1:Product) "
+         "WITH d, collect(p1.name) as drugs "
+         "OPTIONAL MATCH (m:Medical)-[:COVERED_BY]->(p2:Product) "
+         "WHERE m.name CONTAINS d.name "
+         "RETURN d.name AS 疾病百科, drugs AS 治疗药品, "
+         "collect(DISTINCT p2.name) AS 承保产品 "
+         "LIMIT 1",
+         print_fn=lambda r: (
+             print(f"  疾病: 冠心病"),
+             print(f"    治疗药品: {r['治疗药品']}"),
+             print(f"    承保产品: {r['承保产品']}")
+         ))
+
+    # ============================================================
     # 清理和摘要
     # ============================================================
     s.close()
