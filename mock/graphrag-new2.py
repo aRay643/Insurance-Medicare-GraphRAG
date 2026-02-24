@@ -1,6 +1,7 @@
 # ======================== 1. 导入所有核心依赖 ========================
 from difflib import get_close_matches
 from fastapi import FastAPI, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import List, Dict, Set
 import uvicorn
@@ -258,6 +259,15 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(title="保险医疗 GraphRAG API", version="1.0", lifespan=lifespan)
+
+# CORS 配置：允许前端跨域访问
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:5173", "http://127.0.0.1:5173"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 # ======================== 6. 模拟知识图谱（原逻辑保留） ========================
 STANDARD_NODES = [
