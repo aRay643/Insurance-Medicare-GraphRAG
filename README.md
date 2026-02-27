@@ -124,12 +124,14 @@ python Graph/scripts/test_neo4j.py
 
 ### 步骤 5：配置环境变量
 
+#### 5.1 Neo4j 数据库配置
+
 ```bash
 # 复制环境配置
 cp .env.example .env
 ```
 
-编辑 `.env` 文件，配置 Neo4j 连接：
+编辑根目录 `.env` 文件，配置 Neo4j 连接：
 
 ```env
 NEO4J_URI=bolt://localhost:7687
@@ -137,6 +139,20 @@ NEO4J_USER=neo4j
 NEO4J_PASSWORD=88888888
 LLM_PROVIDER=mock
 ```
+
+#### 5.2 LLM API Key 配置（Qwen2.5 大模型）
+
+> **⚠️ 安全提示：为防止 API Key 泄露，请勿将包含真实 Key 的 .env 文件提交到代码仓库！**
+
+1. **获取 API Key**：请私下联系小组长获取 SiliconFlow 的 Qwen2.5 API Key
+2. **配置位置**：将 Key 写入 `mock/.env` 文件（注意是 `mock` 文件夹下的 .env，不是根目录）
+
+```env
+# mock/.env 文件
+QWEN_API_KEY=sk-xxxxxxxxxxxxxxxxxxxxxxx
+```
+
+> 若 `mock/.env` 文件不存在，请手动创建并添加上述配置。
 
 ### 步骤 6：启动服务
 
