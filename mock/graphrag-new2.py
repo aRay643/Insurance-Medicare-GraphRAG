@@ -15,10 +15,6 @@ from neo4j import GraphDatabase
 import threading
 from contextlib import asynccontextmanager
 
-# 新增：加载 .env 文件中的环境变量
-# 这会查找与此脚本位于同一目录或父目录中的 .env 文件
-load_dotenv()
-
 # neo4j配置
 NEO4J_URI = os.getenv("NEO4J_URI", "bolt://127.0.0.1:7687")
 NEO4J_USER = os.getenv("NEO4J_USER", "neo4j")
@@ -94,24 +90,22 @@ class NodeCache:
 # 全局缓存实例（默认 1 小时）
 node_cache = NodeCache(ttl=3600, limit=10000)
 
-# ======================== 2. 全局配置（从 .env 文件读取） ========================
-# 修改：直接从环境变量读取，不再需要默认的明文key
-SPARK_APPID = os.getenv("XINGHUO_APPID")
-SPARK_API_KEY = os.getenv("XINGHUO_API_KEY")
-SPARK_API_SECRET = os.getenv("XINGHUO_API_SECRET")
+# ======================== 2. 全局配置（从 mock/.env 文件读取） ========================
+# 明确从 mock 文件夹下的 .env 加载配置
+load_dotenv(os.path.join(os.path.dirname(__file__), '.env'))
 
-# 新增：检查关键配置是否存在
-if not all([SPARK_APPID, SPARK_API_KEY, SPARK_API_SECRET]):
+# SiliconFlow Qwen2.5 配置
+QWEN_API_KEY = os.getenv("QWEN_API_KEY")
+
+# 检查 Qwen API 配置
+if not QWEN_API_KEY:
     print("*"*60)
-    print("【警告】: 讯飞星火的配置 (APPID, API_KEY, API_SECRET) 未在 .env 文件中完全配置。")
-    print("【提示】: 请在项目根目录创建 .env 文件并添加以下内容：")
-    print("XINGHUO_APPID=your_app_id")
-    print("XINGHUO_API_KEY=your_api_key")
-    print("XINGHUO_API_SECRET=your_api_secret")
+    print("【警告】: SiliconFlow QWEN_API_KEY 未在 mock/.env 文件中配置。")
+    print("【提示】: 请在 mock/.env 文件中添加：")
+    print("QWEN_API_KEY=sk-xxxxxxxxxxxxxxxxxxxxxxx")
     print("*"*60)
 
-SPARK_MODEL = "lite"
-# 兜底开关：API恢复后改为 False 即可切回星火真实调用
+# 保持兼容性的占位变量
 SPARK_API_FALLBACK = False
 
 # FastAPI 服务配置
@@ -196,44 +190,38 @@ def get_close_matches_custom(query: str, candidates: List[str], n: int = 1, cuto
 
 # ======================== 3. 星火 API 签名+调用函数 ========================
 def spark_chat_completions(messages: list, temperature: float = 0.0) -> str:
-    """星火 LLM 核心调用函数 (OpenAI 兼容格式)"""
-    if not all([SPARK_API_KEY, SPARK_API_SECRET]):
-        raise ValueError("星火API配置不完整，请检查 .env 文件。")
+    """已切换至 Qwen2.5 (SiliconFlow 免费版)"""
+    api_key = os.getenv("QWEN_API_KEY")
+    if not api_key:
+        raise ValueError("请在 .env 中配置 QWEN_API_KEY")
 
-    url = "https://spark-api-open.xf-yun.com/v1/chat/completions"
+    # SiliconFlow 的 API 地址
+    url = "https://api.siliconflow.cn/v1/chat/completions"
 
-    # 直接使用 Bearer APIKey:APISecret 格式进行鉴权
     headers = {
-        "Authorization": f"Bearer {SPARK_API_KEY}:{SPARK_API_SECRET}",
+        "Authorization": f"Bearer {api_key}",
         "Content-Type": "application/json"
     }
 
-    # 使用 OpenAI 标准的 Payload 格式
     payload = {
-        "model": SPARK_MODEL,
+        # 使用 SiliconFlow 上的免费模型名
+        "model": "Qwen/Qwen2.5-7B-Instruct",
         "messages": messages,
         "temperature": temperature,
-        "max_tokens": 2048
+        "max_tokens": 512
     }
 
     try:
-        response = requests.post(url=url, headers=headers, json=payload, timeout=30)
+        response = requests.post(url=url, headers=headers, json=payload, timeout=60)
 
-        # 如果依然报错，把服务端的详细错误信息打印出来
         if response.status_code != 200:
-            print(f"星火服务端返回错误: {response.text}")
+            print(f"Qwen API 报错: {response.text}")
             response.raise_for_status()
 
         result = response.json()
-
-        # 按照 OpenAI 格式解析返回的 JSON 结果
-        if "choices" in result and len(result["choices"]) > 0:
-             return result["choices"][0]["message"]["content"].strip()
-        else:
-            raise Exception(f"星火API返回格式不符合预期: {result}")
-
+        return result["choices"][0]["message"]["content"].strip()
     except Exception as e:
-        raise Exception(f"星火 API 调用失败：{str(e)}")
+        raise Exception(f"Qwen 调用失败：{str(e)}")
 
 
 # ======================== 4. 实体提取兜底函数（优化实体解析） ========================
@@ -310,30 +298,59 @@ CORE_RELATIONS = {"被排除在承保范围之外", "最高投保年龄", "分�
 
 # ======================== 7. 核心业务函数（优化回答话术，贴合保险业务） ========================
 def extract_entities(user_query: str) -> Set[str]:
-    """实体提取：优先星火API，失败则自动兜底"""
-    # 第一步：尝试调用星火API
+    """实体提取：优先星火API，失败则自动兜底，加入 Few-Shot 示例强制模型依葫芦画瓢"""
     if not SPARK_API_FALLBACK:
         try:
+            # 引入 Few-Shot (小样本) 提示，这是对付小模型不听话最有效的手段
             messages = [
-                {"role": "system", "content": """你是保险医疗实体提取专家，仅提取以下类型实体：
-                1. 保险名称（如：平安e生保护理险）；
-                2. 疾病名称（如：原发性高血压、2型糖尿病）；
-                3. 年龄（如：70岁）；
-                4. 药品名称；
-                5. 养老机构或医院名称；
-                如果未发现以上实体则不用提取。输出格式为纯逗号分隔的字符串，无任何多余字符、冒号、换行或解释。"""},
-                {"role": "user", "content": user_query}
+                {"role": "system", "content": """你是一个冷酷的保险词汇提取器。你的唯一任务是从用户输入中提取核心词汇，不要回答问题！不要解释！
+提取类别包括：保险产品、疾病症状、年龄、医疗方式、保险术语、养老机构、地域。
+
+【示例 1】
+输入：60岁有高血压病史能买百万医疗险吗？
+输出：60岁,高血压病,百万医疗险
+
+【示例 2】
+输入：如果因车祸导致骨折入院，意外险和医疗险的理赔款是互斥的还是叠加的？
+输出：车祸,骨折,意外险,医疗险,理赔款,互斥,叠加
+
+【示例 3】
+输入：对比泰康康惠保防癌险和国寿防癌疾病保险，70岁老人选哪个？
+输出：泰康康惠保防癌险,国寿防癌疾病保险,70岁,老人
+
+请严格按照上面的【输出】格式返回，用英文逗号分隔，不要带有任何多余的汉字。"""},
+                {"role": "user", "content": f"输入：{user_query}\n输出："}
             ]
-            raw_result = spark_chat_completions(messages, temperature=0.0)
+            raw_result = spark_chat_completions(messages, temperature=0.0).strip()
+            
+            # 【优化防御机制】：去除模型习惯性加在末尾的句号/感叹号
+            raw_result = raw_result.strip("。！. ")
+            
+            # 拦截判断：如果长度过长，或者包含明显的回答型词汇，判定为提取失败
+            if raw_result == "无" or len(raw_result) > 100 or "因为" in raw_result or "也就是说" in raw_result:
+                print(f"   [警告]: 模型未遵循指令(长文本)。截断显示: {raw_result[:30]}...")
+                return fallback_extract_entities(user_query)
+            
+            # 兼容中文逗号，进行切分
+            raw_result = raw_result.replace("，", ",") 
             raw_entities = raw_result.split(",")
-            # 清洗星火返回的无效实体
-            cleaned = {ent.strip() for ent in raw_entities if ent.strip() and ":" not in ent and "\n" not in ent}
+            
+            # 清洗无效实体：去掉带有“输入”、“输出”等格式残留的错误词汇
+            cleaned = set()
+            for ent in raw_entities:
+                ent = ent.strip()
+                if ent and ":" not in ent and "输入" not in ent and "输出" not in ent:
+                    cleaned.add(ent)
+            
+            if not cleaned:
+                return fallback_extract_entities(user_query)
+                
             return cleaned
         except Exception as e:
             print(f"【实体提取 API 调用失败】：{str(e)}")
             print("【触发本地兜底】：使用规则提取实体")
 
-    # 第二步：星火API失败/开启兜底时，调用本地规则
+    # 星火API失败/开启兜底/触发防御 时，调用本地规则
     return fallback_extract_entities(user_query)
 
 
