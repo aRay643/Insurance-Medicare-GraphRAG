@@ -295,6 +295,39 @@ GRAPH_TRIPLES = [
 
 CORE_RELATIONS = {"被排除在承保范围之外", "最高投保年龄", "分类为", "承保范围", "等待期"}
 
+# 简单关键词到节点标签的映射，用于精确查询
+LABEL_KEYWORDS = {
+    "机构": "Org",
+    "养老": "Org",
+    "医院": "Org",
+    "险": "Product",
+    "保险": "Product",
+    "产品": "Product",
+    "疾病": "Disease",
+    "药": "Product",
+}
+
+# 意图关键词 -> 关系类型映射，用于精确检索
+RELATION_KEYWORDS = {
+    "岁": ["最高投保年龄", "投保规则"],
+    "年龄": ["最高投保年龄", "投保规则"],  # 覆盖含“年龄”提问
+    "等待期": ["等待期"],
+    "承保范围": ["承保范围"],
+    "保障范围": ["承保范围"],  # 同义映射
+    "报销": ["医保政策", "医保报销"],
+    "报销比例": ["医保报销"],
+    "理赔": ["理赔条款", "赔付"],
+    "赔付": ["理赔条款", "赔付"],
+    "投保": ["投保规则", "理赔条款"],
+    "除外": ["被排除在承保范围之外"],
+    "免责": ["被排除在承保范围之外"],
+    "上浮": ["费率表"],
+    "领取": ["投保规则"],
+    "结算": ["医保政策"],
+    "支持": ["投保规则"],
+    "区别": ["投保规则"],
+}
+
 
 # ======================== 7. 核心业务函数（优化回答话术，贴合保险业务） ========================
 def extract_entities(user_query: str) -> Set[str]:
@@ -354,10 +387,48 @@ def extract_entities(user_query: str) -> Set[str]:
     return fallback_extract_entities(user_query)
 
 
-def get_subgraph(entity_name: str, return_json: bool = True) -> List[Dict] | List[str]:
-    """图谱查询接口，优先Neo4j，失败则回退到内存数据"""
+
+# ---------------------------- helper utilities ----------------------------
+
+def guess_label(entity: str) -> str | None:
+    """根据实体名简单猜测其最可能的节点标签（Org/Product/Disease）。"""
+    if not entity:
+        return None
+    for kw, lab in LABEL_KEYWORDS.items():
+        if kw in entity:
+            return lab
+    return None
+
+
+def extract_relations_from_query(query: str | None) -> List[str]:
+    """根据用户问句关键词筛选出相关关系类型。
+    如果没有匹配到，就返回 CORE_RELATIONS 的列表。
+    """
+    if not query:
+        return list(CORE_RELATIONS)
+    rels = set()
+    for kw, types in RELATION_KEYWORDS.items():
+        if kw in query:
+            rels.update(types)
+    return list(rels) if rels else list(CORE_RELATIONS)
+
+
+# ======================== 7. 核心业务函数（优化回答话术，贴合保险业务） ========================
+
+def get_subgraph(entity_name: str, query: str | None = None, return_json: bool = True) -> List[Dict] | List[str]:
+    """图谱查询接口，优先Neo4j，失败则回退到内存数据。
+
+    添加了：
+    * 可以传入用户问题 (query) 以便意图检测
+    * 借助 guess_label() 精确过滤节点标签
+    * 调用 extract_relations_from_query() 限制返回关系类型
+    """
     json_triples = []
     text_facts = []
+
+    # 1. 准备过滤条件
+    label_hint = guess_label(entity_name)
+    allowed_rels = extract_relations_from_query(query)
 
     # 优先使用 Neo4j
     if driver:
@@ -370,19 +441,30 @@ def get_subgraph(entity_name: str, return_json: bool = True) -> List[Dict] | Lis
             if matches:
                 standard = matches[0]
                 with driver.session(database=NEO4J_DATABASE) as session:
-                    query = """
-                    MATCH (h)-[r]->(t)
-                    WHERE h.name = $name OR t.name = $name
-                    RETURN h.name as head, type(r) as relation, t.name as tail
-                    LIMIT $limit
-                    """
-                    result = session.run(query, name=standard, limit=50)
+                    if label_hint:
+                        cypher = f"""
+                        MATCH (h:{label_hint})-[r]->(t)
+                        WHERE (h.name = $name OR t.name = $name)
+                          AND type(r) IN $rels
+                        RETURN h.name as head, type(r) as relation, t.name as tail
+                        LIMIT $limit
+                        """
+                    else:
+                        cypher = """
+                        MATCH (h)-[r]->(t)
+                        WHERE (h.name = $name OR t.name = $name)
+                          AND type(r) IN $rels
+                        RETURN h.name as head, type(r) as relation, t.name as tail
+                        LIMIT $limit
+                        """
+
+                    result = session.run(cypher, name=standard, rels=allowed_rels, limit=50)
                     for rec in result:
                         head, relation, tail = rec.get("head"), rec.get("relation"), rec.get("tail")
                         if all([head, relation, tail]):
                             json_triples.append({"head": head, "relation": relation, "tail": tail})
                             text_facts.append(f"{head} 的 {relation} 是 {tail}")
-            
+
             if json_triples:
                 # 去重后返回
                 unique_triples = [dict(t) for t in {tuple(d.items()) for d in json_triples}]
@@ -391,16 +473,21 @@ def get_subgraph(entity_name: str, return_json: bool = True) -> List[Dict] | Lis
         except Exception as e:
             print(f"?? 使用 Neo4j 检索时出错：{e}")
 
-    # 回退到内存三元组
+    # 回退到内存三元组（同样运用 allowed_rels 过滤）
     standard_entity_matches = get_close_matches_custom(entity_name, STANDARD_NODES, n=1, cutoff=0.5)
     if not standard_entity_matches:
         return []
     standard_entity = standard_entity_matches[0]
 
+    # 对 allowed_rels 做规范化以便比较
+    norm_allowed = {normalize_name(r) for r in allowed_rels}
     for s, p, o in GRAPH_TRIPLES:
-        if standard_entity in (s, o) and p in CORE_RELATIONS:
-            json_triples.append({"head": s, "relation": p, "tail": o})
-            text_facts.append(f"{s} 对 {o} 有关系 {p}")
+        # 1. 实体匹配
+        if standard_entity in (s, o):
+            # 2. 关系类型过滤（比较规范化后的值）
+            if normalize_name(p) in norm_allowed:
+                json_triples.append({"head": s, "relation": p, "tail": o})
+                text_facts.append(f"{s} 对 {o} 有关系 {p}")
 
     json_triples = [dict(t) for t in {tuple(d.items()) for d in json_triples}]
     text_facts = list(set(text_facts))
@@ -492,7 +579,8 @@ class EntityRequest(BaseModel):
 @app.post("/subgraph", response_model=List[Dict])
 async def api_subgraph(request: EntityRequest):
     try:
-        return get_subgraph(request.entity_name, return_json=True)
+        # 这个简单查询不考虑用户问句，因此 query=None
+        return get_subgraph(request.entity_name, query=None, return_json=True)
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"接口调用失败：{str(e)}")
 
@@ -521,8 +609,8 @@ async def api_chat(request: ChatRequest):
         all_facts, all_triples = [], []
         for entity in raw_entities:
             print(f"   -> 正在检索实体: {entity}")
-            triples = get_subgraph(entity, return_json=True)
-            facts = get_subgraph(entity, return_json=False)
+            triples = get_subgraph(entity, query=request.question, return_json=True)
+            facts = get_subgraph(entity, query=request.question, return_json=False)
 
             if not triples:
                 print(f"      (实体 '{entity}' 未在图谱/本地数据中匹配到任何三元组)")
@@ -575,7 +663,7 @@ def graph_rag_pipeline(user_query: str) -> str:
     print(f"2. 检索图谱事实...")
     all_facts = []
     for entity in raw_entities:
-        facts = get_subgraph(entity, return_json=False)
+        facts = get_subgraph(entity, query=user_query, return_json=False)
         all_facts.extend(facts)
     all_facts = list(set(all_facts))
     print(f"   ? 检索结果:\n{chr(10).join([f'- {f}' for f in all_facts]) if all_facts else '无'}")
