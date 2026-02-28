@@ -68,9 +68,16 @@ export function useChatHistory() {
   const updateCurrentMessages = useCallback((messages: ChatMessage[]) => {
     setSessions(prev => prev.map(s => {
       if (s.id === currentSessionId) {
-        // 更新标题为第一个用户消息
-        const userMsg = messages.find(m => m.role === 'user');
-        const title = userMsg ? userMsg.content.slice(0, 20) + (userMsg.content.length > 20 ? '...' : '') : s.title;
+        // 查找用户消息
+        const userMessages = messages.filter(m => m.role === 'user');
+        let title = s.title;
+
+        // 只有当标题还是"新对话"时才更新为第一条用户消息的内容
+        if (userMessages.length > 0 && s.title === '新对话') {
+          const firstUserMsg = userMessages[0];
+          title = firstUserMsg.content.slice(0, 20) + (firstUserMsg.content.length > 20 ? '...' : '');
+        }
+
         return { ...s, messages, title };
       }
       return s;
