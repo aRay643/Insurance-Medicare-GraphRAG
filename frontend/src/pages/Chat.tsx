@@ -66,15 +66,72 @@ const TypingIndicator = () => (
   </div>
 );
 
-// 格式化三元组显示
-const formatTriple = (cite: any) => {
+// 1. 全覆盖关系映射字典（已涵盖数据库所有关系词 + 容错变体）
+const RELATION_MAP: Record<string, string> = {
+  // ============ 保险产品相关 ============
+  'BELONGS_TO_CATEGORY': '所属类别',
+  'HAS_PAYOUT_LOGIC': '赔付逻辑',
+  'HAS_TERM': '包含条款',
+  'HAS TERM': '包含条款',           // 容错：防止后端漏掉下划线
+  'COVERS': '保障范围',
+  'HAS_EXCLUSION': '免责条款',
+  'HAS_RIGHT': '享有权利',
+  'ELIGIBILITY': '投保条件',
+  'COVERED_BY': '可投保障',
+  'COVERS_TREATMENT': '覆盖治疗',
+  'COVERS_SERVICE': '覆盖服务',
+
+  // ============ 养老机构相关 ============
+  'LOCATED_IN': '位于',
+  'BELONGS_TO': '属于',
+  'PROVIDES_SERVICE': '提供服务',
+
+  // ============ 药品相关 ============
+  'HAS_TRADE_NAME': '药品商品名',
+  'PRODUCED_BY': '生产商',
+  'TREATS': '治疗',
+
+  // ============ 其他常见关系（兜底） ============
+  'SUITABLE_FOR': '适用人群',
+  'RELATED_TO': '相关联',
+  'IS_A': '属于',
+  'PART_OF': '包含于',
+};
+
+// 2. 增强健壮性的数据解析函数
+const parseTriple = (cite: any) => {
+  let head = '', relation = '', tail = '', extra = '';
+
+  // 提取原始数据
   if (cite && typeof cite === 'object' && !Array.isArray(cite)) {
-    return `(${cite.head}) -- [${cite.relation}] --> (${cite.tail})`;
+    head = cite.head;
+    relation = cite.relation;
+    tail = cite.tail;
+  } else if (Array.isArray(cite)) {
+    head = cite[0];
+    relation = cite[1];
+    tail = cite[2];
+    extra = cite[3] || '';
+  } else {
+    // 兜底：如果格式完全不认识，直接返回原字符串
+    return { isRaw: true, content: String(cite) };
   }
-  if (Array.isArray(cite)) {
-    return `(${cite[0]}) -- [${cite[1]}] --> (${cite[2]})` + (cite[3] ? ` 【${cite[3]}】` : '');
-  }
-  return String(cite);
+
+  // 【核心修复点】：清洗关系字符串，消除不可见字符和大小写带来的匹配失败
+  const cleanRelation = String(relation)
+    .trim()          // 去除首尾可能存在的空格
+    .toUpperCase(); // 统一转为大写以匹配字典
+
+  // 查找字典，如果字典里没有，则作为最后的兜底显示清洗后的原词
+  const finalRelation = RELATION_MAP[cleanRelation] || relation;
+
+  return {
+    isRaw: false,
+    head: String(head).trim(),
+    relation: finalRelation,
+    tail: String(tail).trim(),
+    extra: extra ? String(extra).trim() : ''
+  };
 };
 
 export default function Chat() {
@@ -406,42 +463,105 @@ export default function Chat() {
                     )}
                     {/* 证据展示部分 - 仅 AI 消息显示 */}
                     {item.role === 'assistant' && item.citations && item.citations.length > 0 && !item.isError && (
-                      <div style={{ marginTop: 8 }}>
-                        <button
+                      <div style={{ marginTop: 12 }}>
+                        {/* 优化后的切换按钮 */}
+                        <div
                           onClick={() => setExpandedEvidence(expandedEvidence === item.id ? null : item.id)}
                           style={{
-                            background: '#6c757d',
-                            color: '#fff',
-                            border: 'none',
-                            borderRadius: 4,
-                            padding: '4px 12px',
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: 6,
+                            color: '#1890ff',
                             fontSize: 13,
-                            cursor: 'pointer'
+                            cursor: 'pointer',
+                            userSelect: 'none',
+                            padding: '4px 0'
                           }}
                         >
-                          {expandedEvidence === item.id ? '收起证据' : '查看证据'} (Graph Evidence)
-                        </button>
+                          <span style={{
+                            transform: expandedEvidence === item.id ? 'rotate(90deg)' : 'rotate(0deg)',
+                            transition: 'transform 0.2s'
+                          }}>
+                            ▶
+                          </span>
+                          <span>{expandedEvidence === item.id ? '收起溯源证据' : '查看溯源证据'}</span>
+                          <span style={{ color: '#8c8c8c', fontSize: 12 }}>(知识图谱)</span>
+                        </div>
+
+                        {/* 优化后的图谱展示区 */}
                         {expandedEvidence === item.id && (
                           <div style={{
                             marginTop: 8,
-                            padding: 12,
-                            background: '#f8f9fa',
-                            border: '1px solid #e9ecef',
-                            borderRadius: 6,
+                            padding: '12px 16px',
+                            background: '#fafafa',
+                            border: '1px solid #f0f0f0',
+                            borderRadius: 8,
                             fontSize: 13
                           }}>
-                            <div style={{ fontWeight: 'bold', marginBottom: 8, color: '#495057' }}>
-                              知识图谱提取的三元组：
+                            <div style={{ fontWeight: 500, marginBottom: 12, color: '#595959' }}>
+                              <span style={{ marginRight: 6 }}>📊</span>
+                              提取的关键信息路径：
                             </div>
-                            {item.citations.map((cite, idx) => (
-                              <div key={idx} style={{
-                                fontFamily: 'monospace',
-                                color: '#495057',
-                                margin: '4px 0'
-                              }}>
-                                {formatTriple(cite)}
-                              </div>
-                            ))}
+
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                              {item.citations.map((cite, idx) => {
+                                const parsed = parseTriple(cite);
+
+                                // 非标准格式的兜底渲染
+                                if (parsed.isRaw) {
+                                  return (
+                                    <div key={idx} style={{ color: '#595959', fontFamily: 'monospace' }}>
+                                      {parsed.content}
+                                    </div>
+                                  );
+                                }
+
+                                // 标准三元组的美化渲染
+                                return (
+                                  <div key={idx} style={{
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    flexWrap: 'wrap',
+                                    gap: 8,
+                                    lineHeight: '1.5'
+                                  }}>
+                                    {/* 头实体 */}
+                                    <span style={{
+                                      color: '#262626',
+                                      fontWeight: 500,
+                                      background: '#fff',
+                                      padding: '2px 8px',
+                                      borderRadius: 4,
+                                      border: '1px solid #d9d9d9'
+                                    }}>
+                                      {parsed.head}
+                                    </span>
+
+                                    {/* 关系标签 (Tag) */}
+                                    <span style={{
+                                      fontSize: 12,
+                                      color: '#096dd9',
+                                      background: '#e6f7ff',
+                                      border: '1px solid #91d5ff',
+                                      padding: '1px 8px',
+                                      borderRadius: 12
+                                    }}>
+                                      {parsed.relation}
+                                    </span>
+
+                                    {/* 尾实体 */}
+                                    <span style={{ color: '#595959' }}>
+                                      {parsed.tail}
+                                      {parsed.extra && (
+                                        <span style={{ color: '#8c8c8c', marginLeft: 4 }}>
+                                          ({parsed.extra})
+                                        </span>
+                                      )}
+                                    </span>
+                                  </div>
+                                );
+                              })}
+                            </div>
                           </div>
                         )}
                       </div>
