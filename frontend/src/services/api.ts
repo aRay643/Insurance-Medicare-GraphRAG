@@ -45,7 +45,7 @@ export const chatAPI = {
       hop: 2,
       limit: 20,
     }, {
-      timeout: 10000
+      timeout: 60000
     });
     return response.data;
   },
